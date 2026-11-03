@@ -4,7 +4,7 @@ import pandas as pd
 
 from services.leitor_pdf import extrair_texto_pdf
 from extracao.portaria import extrair_informacoes
-from planilhas.gravador_excel import enviar_para_planilha
+from planilhas.gravador_excel import enviar_para_planilha_em_memoria
 
 
 st.set_page_config(
@@ -32,6 +32,7 @@ arquivo_excel = st.file_uploader(
 )
 
 
+
 if arquivos:
     resultados = []
 
@@ -53,12 +54,22 @@ if arquivos:
                 )
                 continue
 
-            dados = extrair_informacoes(texto_completo)
-            dados["arquivo"] = arquivo.name
+            registros = extrair_informacoes(texto_completo)
 
-            resultados.append(dados)
+            if isinstance(registros, dict):
+                registros = [registros]
 
-            st.json(dados)
+            if not registros:
+                st.warning(
+                    "Nenhuma portaria foi identificada."
+                )
+                continue
+
+            for registro in registros:
+                registro["arquivo"] = arquivo.name
+                resultados.append(registro)
+
+            st.json(registros)
 
             with st.expander("Conferir texto original extraído"):
                 st.text(texto_completo)
@@ -91,6 +102,7 @@ if arquivos:
                     campo: campo
                     for campo in resultados[0]
                 }
+
                 primeira_linha, planilha_atualizada = (
                     enviar_para_planilha_em_memoria(
                         arquivo_excel=arquivo_excel.getvalue(),
@@ -100,15 +112,15 @@ if arquivos:
                 )
 
                 st.success("Dados enviados para a planilha!")
+
                 nome_saida = arquivo_excel.name.rsplit(".", 1)[0]
+
                 st.download_button(
                     "Baixar planilha atualizada",
                     data=planilha_atualizada,
                     file_name=f"{nome_saida}_atualizada.xlsx",
-                    mime=(
-                        "application/vnd.openxmlformats-officedocument"
-                        ".spreadsheetml.sheet"
-                    )
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+
             except Exception as erro:
                 st.error(f"Erro ao enviar para a planilha: {erro}")
