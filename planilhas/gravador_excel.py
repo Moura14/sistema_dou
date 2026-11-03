@@ -1,66 +1,130 @@
+from copy import copy
+from io import BytesIO
 
 from openpyxl import load_workbook
-from io import BytesIO
+
+
+def _norm(valor):
+    return str(valor).strip().casefold() if valor is not None else ""
+
+
+def listar_abas_e_cabecalhos(arquivo_excel, aba=None, linha_cabecalho=1):
+    """Retorna (nomes das abas, cabeçalhos da aba escolhida) sem alterar o arquivo."""
+    wb = load_workbook(BytesIO(arquivo_excel), read_only=True)
+    try:
+        ws = wb[aba] if aba else wb.active
+        cabecalhos = [
+            str(c).strip()
+            for c in next(
+                ws.iter_rows(
+                    min_row=linha_cabecalho,
+                    max_row=linha_cabecalho,
+                    values_only=True,
+                ),
+                (),
+            )
+            if c is not None and str(c).strip()
+        ]
+        return wb.sheetnames, cabecalhos
+    finally:
+        wb.close()
+
+
+def _ultima_linha_com_dados(ws, colunas, linha_cabecalho):
+    """Última linha realmente preenchida (ignora linhas vazias só formatadas)."""
+    for linha in range(ws.max_row, linha_cabecalho, -1):
+        if any(ws.cell(linha, c).value not in (None, "") for c in colunas):
+            return linha
+    return linha_cabecalho
 
 
 def enviar_para_planilha_em_memoria(
     arquivo_excel,
     dados,
     mapeamento,
-    aba=None
+    aba=None,
+    linha_cabecalho=1,
+    criar_colunas_faltantes=False,
+    chave=None,
 ):
-    workbook = load_workbook(
-        BytesIO(arquivo_excel)
-    )
+    """
+    Acrescenta `dados` ao final de uma planilha existente.
 
+    mapeamento: {campo_do_registro: "Cabeçalho na planilha"}
+    chave: campo usado para evitar duplicatas (ex.: "numero_portaria").
+    Retorna um dict com o arquivo atualizado (bytes) e contadores.
+    """
+    wb = load_workbook(BytesIO(arquivo_excel))
     try:
-        planilha = (
-            workbook[aba] if aba
-            else workbook.active
-        )
+        ws = wb[aba] if aba else wb.active
 
         cabecalhos = {}
+        for col in range(1, ws.max_column + 1):
+            valor = ws.cell(linha_cabecalho, col).value
+            if valor is not None and str(valor).strip():
+                cabecalhos[_norm(valor)] = col
 
-        for coluna in range(1, planilha.max_column + 1):
-            valor = planilha.cell(1, coluna).value
-
-            if valor is not None:
-                cabecalhos[str(valor).strip().casefold()] = coluna
-
-        faltantes = [
-            cabecalho
-            for cabecalho in mapeamento.values()
-            if cabecalho.casefold() not in cabecalhos
-        ]
-
+        faltantes = [h for h in mapeamento.values() if _norm(h) not in cabecalhos]
         if faltantes:
-            raise ValueError(
-                f"Cabeçalhos não encontrados: {faltantes}"
-            )
+            if not criar_colunas_faltantes:
+                raise ValueError(f"Cabeçalhos não encontrados: {faltantes}")
+            proxima = max(cabecalhos.values(), default=0) + 1
+            for h in faltantes:
+                if _norm(h) in cabecalhos:
+                    continue
+                ws.cell(linha_cabecalho, proxima, value=h)
+                cabecalhos[_norm(h)] = proxima
+                proxima += 1
 
-        primeira_linha = planilha.max_row + 1
+        colunas = {campo: cabecalhos[_norm(h)] for campo, h in mapeamento.items()}
+        ultima = _ultima_linha_com_dados(ws, colunas.values(), linha_cabecalho)
+
+        # Chaves já existentes na planilha (para não duplicar)
+        existentes = set()
+        if chave and chave in colunas:
+            for linha in range(linha_cabecalho + 1, ultima + 1):
+                v = ws.cell(linha, colunas[chave]).value
+                if v not in (None, ""):
+                    existentes.add(_norm(v))
+
+        primeira_linha = ultima + 1
+        linha_atual = ultima
+        inseridos = 0
+        ignorados = 0
 
         for registro in dados:
-            nova_linha = planilha.max_row + 1
+            if chave and chave in colunas:
+                k = _norm(registro.get(chave))
+                if k and k in existentes:
+                    ignorados += 1
+                    continue
+                existentes.add(k)
 
-            for campo, cabecalho in mapeamento.items():
-                coluna = cabecalhos[cabecalho.casefold()]
+            linha_atual += 1
+            inseridos += 1
+
+            for campo, col in colunas.items():
                 valor = registro.get(campo)
-
                 if isinstance(valor, list):
                     valor = ", ".join(map(str, valor))
+                celula = ws.cell(linha_atual, col, value=valor)
 
-                planilha.cell(
-                    row=nova_linha,
-                    column=coluna,
-                    value=valor
-                )
+                # Herda a formatação da linha de cima (bordas, fonte, largura de texto)
+                modelo = ws.cell(max(linha_atual - 1, linha_cabecalho), col)
+                if modelo.has_style:
+                    celula.font = copy(modelo.font)
+                    celula.border = copy(modelo.border)
+                    celula.fill = copy(modelo.fill)
+                    celula.number_format = modelo.number_format
+                    celula.alignment = copy(modelo.alignment)
 
-        arquivo_saida = BytesIO()
-        workbook.save(arquivo_saida)
-        arquivo_saida.seek(0)
-
-        return primeira_linha, arquivo_saida.getvalue()
-
+        saida = BytesIO()
+        wb.save(saida)
+        return {
+            "arquivo": saida.getvalue(),
+            "primeira_linha": primeira_linha,
+            "inseridos": inseridos,
+            "ignorados": ignorados,
+        }
     finally:
-        workbook.close()
+        wb.close()
