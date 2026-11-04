@@ -63,7 +63,7 @@ def enviar_para_planilha_em_memoria(
                 nome = str(valor).strip().casefold()
                 cabecalhos[nome] = coluna
 
-        # Mapeamento: cabeçalho da planilha -> campo extraído.
+        
         colunas_destino = {}
         faltantes = []
 
@@ -84,8 +84,7 @@ def enviar_para_planilha_em_memoria(
                 f"'{planilha.title}': {faltantes}"
             )
 
-        # Localiza a coluna correspondente ao campo usado
-        # para verificar duplicatas.
+        
         coluna_chave = None
 
         if chave:
