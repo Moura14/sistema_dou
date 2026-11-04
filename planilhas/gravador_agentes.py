@@ -44,7 +44,6 @@ def _sem_acento(texto):
 
 
 def parse_data(texto):
-    """'9 de abril de 2026' ou '09/04/2026' -> datetime (ou None)."""
     if not texto:
         return None
     texto = _norm(texto)
@@ -86,7 +85,6 @@ CAMPOS_ORIGEM = {
 
 
 def registro_para_linha(registro, titularidade="Titular"):
-    """Converte um registro extraído da portaria em um dict com todos os campos enviáveis."""
     tipo = registro.get("tipo_ato")
     entrada = tipo in ATOS_DE_ENTRADA
     ato = None
@@ -120,7 +118,6 @@ def registro_para_linha(registro, titularidade="Titular"):
         "arquivo": registro.get("arquivo"),
         "texto_original_ato": registro.get("texto_original_ato"),
     }
-
 
 
 COLUNAS = {
@@ -165,6 +162,14 @@ def _ultima_linha_com_dados(ws, bloco, ncols=9):
     return ult
 
 
+def listar_abas_com_blocos(arquivo_excel):
+    wb = load_workbook(BytesIO(arquivo_excel))
+    try:
+        return wb.sheetnames, [n for n in wb.sheetnames if detectar_blocos(wb[n])]
+    finally:
+        wb.close()
+
+
 def listar_blocos(arquivo_excel, aba=ABA_PADRAO):
     wb = load_workbook(BytesIO(arquivo_excel))
     try:
@@ -175,7 +180,6 @@ def listar_blocos(arquivo_excel, aba=ABA_PADRAO):
 
 
 def listar_colunas(arquivo_excel, aba=ABA_PADRAO):
-    """[(nº da coluna, 'E – PERÍODO DE GESTÃO › Data Início'), ...] lidos do 1º cabeçalho."""
     wb = load_workbook(BytesIO(arquivo_excel))
     try:
         ws = wb[aba]
@@ -186,7 +190,7 @@ def listar_colunas(arquivo_excel, aba=ABA_PADRAO):
 
         def rotulo(linha, col):
             valor = ws.cell(linha, col).value
-            if valor in (None, ""):         
+            if valor in (None, ""):          
                 for m in ws.merged_cells.ranges:
                     if m.min_row <= linha <= m.max_row and m.min_col <= col <= m.max_col:
                         valor = ws.cell(m.min_row, m.min_col).value
@@ -206,7 +210,6 @@ def listar_colunas(arquivo_excel, aba=ABA_PADRAO):
 
 
 def sugerir_bloco(texto, cargos):
-    """Cargo mais parecido com `texto` (ou None se nada se parece)."""
     if not texto:
         return None
     alvo = _sem_acento(texto)
@@ -217,7 +220,6 @@ def sugerir_bloco(texto, cargos):
 
 
 def _abrir_linha_no_fim_do_bloco(ws, bloco, blocos, ncols=9):
-    """Insere uma linha logo após o bloco, deslocando o que vem abaixo."""
     idx = bloco["fim"] + 1
     merge_a = _merge_coluna_a(ws, bloco["inicio"])
     abaixo = [m for m in list(ws.merged_cells.ranges) if m.min_row >= idx]
@@ -227,7 +229,7 @@ def _abrir_linha_no_fim_do_bloco(ws, bloco, blocos, ncols=9):
 
     if merge_a is not None:
         ws.unmerge_cells(merge_a.coord)
-    for m in abaixo:                     
+    for m in abaixo:                      
         ws.merged_cells.ranges.discard(m)
 
     ws.insert_rows(idx)
@@ -243,7 +245,6 @@ def _abrir_linha_no_fim_do_bloco(ws, bloco, blocos, ncols=9):
         if link is not None:
             link.ref = celula.coordinate
 
-
     for col in range(2, ncols + 1):
         ws.cell(idx, col)._style = copy(ws.cell(bloco["fim"], col)._style)
 
@@ -258,6 +259,7 @@ def _abrir_linha_no_fim_do_bloco(ws, bloco, blocos, ncols=9):
 
 
 def _ja_existe(ws, bloco, linha, mapeamento, ncols):
+    """Duplicata = mesmo nome + mesmo ato no bloco (só checa se essas colunas foram mapeadas)."""
     col_nome = mapeamento.get("nome")
     col_ato = (mapeamento.get("ato_designacao") if linha.get("ato_designacao")
                else mapeamento.get("ato_afastamento")) or mapeamento.get("ato")
@@ -272,6 +274,7 @@ def _ja_existe(ws, bloco, linha, mapeamento, ncols):
 
 
 def adicionar_linhas(arquivo_excel, itens, aba=ABA_PADRAO, mapeamento=None):
+  
     wb = load_workbook(BytesIO(arquivo_excel))
     try:
         ws = wb[aba]
@@ -315,6 +318,7 @@ def adicionar_linhas(arquivo_excel, itens, aba=ABA_PADRAO, mapeamento=None):
         "inseridos": inseridos,
         "ignorados": ignorados,
     }
+
 
 
 def _caminhos_das_abas(z):

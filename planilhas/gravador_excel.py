@@ -9,7 +9,7 @@ def _norm(valor):
 
 
 def listar_abas_e_cabecalhos(arquivo_excel, aba=None, linha_cabecalho=1):
-    """Retorna (nomes das abas, cabeçalhos da aba escolhida) sem alterar o arquivo."""
+
     wb = load_workbook(BytesIO(arquivo_excel), read_only=True)
     try:
         ws = wb[aba] if aba else wb.active
@@ -31,7 +31,6 @@ def listar_abas_e_cabecalhos(arquivo_excel, aba=None, linha_cabecalho=1):
 
 
 def _ultima_linha_com_dados(ws, colunas, linha_cabecalho):
-    """Última linha realmente preenchida (ignora linhas vazias só formatadas)."""
     for linha in range(ws.max_row, linha_cabecalho, -1):
         if any(ws.cell(linha, c).value not in (None, "") for c in colunas):
             return linha
@@ -47,13 +46,7 @@ def enviar_para_planilha_em_memoria(
     criar_colunas_faltantes=False,
     chave=None,
 ):
-    """
-    Acrescenta `dados` ao final de uma planilha existente.
-
-    mapeamento: {campo_do_registro: "Cabeçalho na planilha"}
-    chave: campo usado para evitar duplicatas (ex.: "numero_portaria").
-    Retorna um dict com o arquivo atualizado (bytes) e contadores.
-    """
+   
     wb = load_workbook(BytesIO(arquivo_excel))
     try:
         ws = wb[aba] if aba else wb.active
@@ -79,7 +72,7 @@ def enviar_para_planilha_em_memoria(
         colunas = {campo: cabecalhos[_norm(h)] for campo, h in mapeamento.items()}
         ultima = _ultima_linha_com_dados(ws, colunas.values(), linha_cabecalho)
 
-        # Chaves já existentes na planilha (para não duplicar)
+        
         existentes = set()
         if chave and chave in colunas:
             for linha in range(linha_cabecalho + 1, ultima + 1):
@@ -109,7 +102,7 @@ def enviar_para_planilha_em_memoria(
                     valor = ", ".join(map(str, valor))
                 celula = ws.cell(linha_atual, col, value=valor)
 
-                # Herda a formatação da linha de cima (bordas, fonte, largura de texto)
+                
                 modelo = ws.cell(max(linha_atual - 1, linha_cabecalho), col)
                 if modelo.has_style:
                     celula.font = copy(modelo.font)

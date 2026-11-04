@@ -14,6 +14,7 @@ from planilhas.gravador_agentes import (
     CAMPOS_ORIGEM,
     MAPEAMENTO_PADRAO,
     adicionar_linhas,
+    listar_abas_com_blocos,
     listar_blocos,
     listar_colunas,
     registro_para_linha,
@@ -57,7 +58,7 @@ if arquivos:
                 registro["arquivo"] = arquivo.name
                 resultados.append(registro)
 
-            st.json(registros)
+            
             with st.expander("Conferir texto original extraído"):
                 st.text(texto_completo)
         except Exception as erro:
@@ -87,11 +88,19 @@ if arquivos:
         )
 
         if modo.startswith("Relação"):
-            cargos = listar_blocos(bytes_excel)
+            abas_ag, abas_com_blocos = listar_abas_com_blocos(bytes_excel)
+            aba_ag = st.selectbox(
+                "Aba da planilha",
+                abas_ag,
+                index=abas_ag.index(abas_com_blocos[0]) if abas_com_blocos else 0,
+                key="aba_ag",
+            )
+            cargos = listar_blocos(bytes_excel, aba_ag)
             if not cargos:
-                st.error("Não encontrei blocos 'CARGO' na aba Principal desta planilha.")
+                st.error(f"Não encontrei blocos com o cabeçalho 'CARGO' na aba '{aba_ag}'. "
+                         "Escolha outra aba ou confira se é a planilha da Relação dos Agentes.")
             else:
-                colunas = listar_colunas(bytes_excel)
+                colunas = listar_colunas(bytes_excel, aba_ag)
                 rotulos = dict(colunas)
                 opcoes_col = [0] + list(rotulos)
                 nome_col = lambda n: "— não enviar —" if n == 0 else rotulos[n]
@@ -144,7 +153,7 @@ if arquivos:
                 if st.button("Adicionar à planilha", disabled=not (itens and mapeamento)):
                     try:
                         st.session_state["resultado_agentes"] = {
-                            **adicionar_linhas(bytes_excel, itens, mapeamento=mapeamento),
+                            **adicionar_linhas(bytes_excel, itens, aba=aba_ag, mapeamento=mapeamento),
                             "nome": arquivo_excel.name.rsplit(".", 1)[0],
                         }
                     except Exception as erro:
@@ -169,7 +178,7 @@ if arquivos:
             aba = st.selectbox("Aba da planilha", abas)
             _, cabecalhos = listar_abas_e_cabecalhos(bytes_excel, aba=aba)
 
-            # União de todos os campos, não só os do primeiro registro
+           
             campos = list(dict.fromkeys(c for r in resultados for c in r))
             nenhum = "— não enviar —"
             opcoes = [nenhum] + cabecalhos
@@ -208,7 +217,7 @@ if arquivos:
                     st.session_state.pop("resultado_planilha", None)
                     st.error(f"Erro ao enviar para a planilha: {erro}")
 
-            # Fica fora do `if st.button`, senão some quando o usuário clica em baixar
+           
             res = st.session_state.get("resultado_planilha")
             if res:
                 st.success(
