@@ -1,5 +1,6 @@
 
 import re
+import unicodedata
 
 
 ACOES = {
@@ -70,8 +71,7 @@ def extrair_nome_depois_acao(texto, resultado_acao):
 
     trecho = texto[resultado_acao.end():]
 
-    # Caso de designação, nomeação etc. em forma passiva:
-    # "Fica designada a 2S (FAB) THAIANA... para exercer..."
+   
     nome_passivo = re.search(
         r"([A-ZÁÉÍÓÚÂÊÔÃÕÇ]+"
         r"(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]+){1,8})"
@@ -82,8 +82,7 @@ def extrair_nome_depois_acao(texto, resultado_acao):
     if nome_passivo:
         return limpar(nome_passivo.group(1))
 
-    # Caso de ato no formato:
-    # "NOMEAR FULANO DE TAL para exercer..."
+    
     nome_normal = re.search(
         r"\s*,?\s*"
         r"([A-ZÁÉÍÓÚÂÊÔÃÕÇ]+"
@@ -113,6 +112,37 @@ def extrair_codigo(bloco):
     ))
 
 
+def sugerir_campo_para_cabecalho(cabecalho, campos_disponiveis):
+    normalizado = unicodedata.normalize("NFKD", str(cabecalho))
+    normalizado = normalizado.encode("ascii", "ignore").decode("ascii").casefold()
+    palavras = set(re.findall(r"[a-z0-9]+", normalizado))
+
+    sugestoes = (
+        ("codigos_cargo", {"codigo", "codigos"}, {"ce", "cce", "fce", "cargo", "funcao"}),
+        ("numero_portaria", {"numero", "n"}, {"portaria"}),
+        ("data_portaria", {"data"}, {"portaria"}),
+        ("data_publicacao", {"data"}, {"publicacao"}),
+        ("data_efeito", {"data"}, {"efeito", "inicio", "fim"}),
+        ("tipo_ato", {"tipo"}, {"ato", "portaria"}),
+        ("tipo_ato", {"motivo"}, set()),
+        ("tipo_ato", {"ato"}, set()),
+        ("nome", {"nome"}, set()),
+        ("cpf", {"cpf"}, set()),
+        ("cargo", {"cargo", "funcao"}, set()),
+        ("orgao", {"orgao"}, set()),
+        ("ministerio", {"ministerio"}, set()),
+        ("texto_original_ato", {"texto"}, {"original", "ato"}),
+        ("arquivo", {"arquivo", "documento"}, set()),
+    )
+
+    for campo, gatilhos, termos in sugestoes:
+        if campo in campos_disponiveis and gatilhos.issubset(palavras):
+            if not termos or palavras.intersection(termos):
+                return campo
+
+    return None
+
+
 def extrair_cargo(bloco):
     cargo = re.search(
         r"(?:da função de|do cargo de|"
@@ -127,8 +157,7 @@ def extrair_cargo(bloco):
     if cargo:
         return limpar(cargo.group(1))
 
-    # Formato de portaria individual:
-    # "para exercer a função de ASSISTENTE na..."
+    
     cargo_individual = re.search(
         r"para exercer\s+(?:a função|o cargo)\s+de\s+"
         r"(.+?)(?=\s+(?:na|no)\s+|,|$)",
@@ -178,7 +207,7 @@ def extrair_informacoes(texto):
 
     registros = []
 
-    # FORMATO 1: várias portarias no mesmo documento
+    
     padrao_numero = (
         r"(?im)^\s*N[º°.]?\s*([\d.]+)\s*[-–—]\s*"
     )
@@ -238,7 +267,7 @@ def extrair_informacoes(texto):
             "texto_original_ato": limpar(bloco),
         })
 
-    # FORMATO 2: documento com apenas uma portaria
+  
     if not registros:
 
         titulo = re.search(

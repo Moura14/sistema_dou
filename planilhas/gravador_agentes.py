@@ -259,7 +259,6 @@ def _abrir_linha_no_fim_do_bloco(ws, bloco, blocos, ncols=9):
 
 
 def _ja_existe(ws, bloco, linha, mapeamento, ncols):
-    """Duplicata = mesmo nome + mesmo ato no bloco (só checa se essas colunas foram mapeadas)."""
     col_nome = mapeamento.get("nome")
     col_ato = (mapeamento.get("ato_designacao") if linha.get("ato_designacao")
                else mapeamento.get("ato_afastamento")) or mapeamento.get("ato")
