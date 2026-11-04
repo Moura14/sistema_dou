@@ -197,20 +197,23 @@ def extrair_informacoes(texto):
     )
 
     data_documento = re.search(
-        r"PORTARIAS?\s+DE\s+(\d{1,2}\s+DE\s+"
+        r"(?im)^\s*PORTARIAS?\b[^\n]*?"
+        r"\bDE\s+(\d{1,2}\s+DE\s+"
         r"(?:JANEIRO|FEVEREIRO|MARÇO|MARCO|ABRIL|MAIO|"
         r"JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|"
         r"NOVEMBRO|DEZEMBRO)\s+DE\s+\d{4})",
         texto,
         re.IGNORECASE
-    )
+)
 
     registros = []
 
     
     padrao_numero = (
-        r"(?im)^\s*N[º°.]?\s*([\d.]+)\s*[-–—]\s*"
-    )
+        r"(?im)^\s*(?:PORTARIAS?\b[^\n]*?)?"
+        r"\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
+        r"\s*(?=(?:[-–—]\s*|,?\s+DE\b))"
+)
 
     ocorrencias = list(re.finditer(padrao_numero, texto))
 
@@ -271,10 +274,12 @@ def extrair_informacoes(texto):
     if not registros:
 
         titulo = re.search(
-            r"(?im)^\s*PORTARIA\s+N[º°]\s*"
-            r"([\d.]+)\s*,?\s*DE\s+([^\n]+)",
+            r"(?im)^\s*PORTARIAS?\b[^\n]*?"
+            r"\bN\s*[º°.]?\s*"
+            r"([\d]+(?:\.[\d]+)*)"
+            r"\s*,?\s*DE\s+([^\n]+)",
             texto
-        )
+)
 
         if titulo:
             numero = titulo.group(1)

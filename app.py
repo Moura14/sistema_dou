@@ -76,6 +76,9 @@ if arquivos:
                 )
                 continue
 
+            with st.expander("Conferir texto original extraído"):
+                st.text(texto_completo)
+
             registros = extrair_informacoes(texto_completo)
 
             if isinstance(registros, dict):
@@ -88,9 +91,6 @@ if arquivos:
             for registro in registros:
                 registro["arquivo"] = arquivo.name
                 resultados.append(registro)
-
-            with st.expander("Conferir texto original extraído"):
-                st.text(texto_completo)
 
         except Exception as erro:
             st.error(f"Erro ao processar {arquivo.name}: {erro}")
