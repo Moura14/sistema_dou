@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -33,6 +34,7 @@ XLSX_MIME = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
+
 @st.cache_data(show_spinner="Lendo PDF...")
 def processar_pdf(conteudo: bytes):
     paginas = extrair_texto_pdf(conteudo)
@@ -65,6 +67,28 @@ def rotulo(reg: dict, i: int) -> str:
 
 def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
+
+
+def sincronizar_alteracoes(chave_editor: str, tabela: dict) -> None:
+    df = st.session_state["alt_df"]
+    edicoes = st.session_state.get(chave_editor, {}).get("edited_rows", {})
+
+    for pos, mudancas in edicoes.items():
+        for coluna, valor in mudancas.items():
+            df.at[int(pos), coluna] = valor
+
+    for pos in df.index:
+        linha = int(df.at[pos, "_linha"])
+        if linha == 0:  # linha nova: não há valor atual
+            continue
+        atual = esq.texto_exibicao(
+            tabela.get(linha, {}).get(df.at[pos, "Coluna"])
+        )
+        df.at[pos, "Atual"] = atual
+        df.at[pos, "Tipo"] = "alterar" if atual else "preencher"
+
+    st.session_state["alt_df"] = df
+    st.session_state["alt_ver"] += 1
 
 
 def fluxo_planilha(resultados, textos, arquivo_excel):
@@ -150,7 +174,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         st.info("Escolha ao menos uma coluna-chave para continuar.")
         return
 
-    # ---- 1. Extração guiada pelo esquema da planilha ----------------------
+
     valores_por_reg = []
     for i, reg in enumerate(resultados):
         valores, pendentes = resolver_por_regra(
@@ -191,7 +215,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             }
         )
 
-    # ---- 2. Correspondência: qual linha cada portaria atualiza ------------
     linhas_match = []
     for i, reg in enumerate(resultados):
         chave_vals = {
@@ -201,12 +224,15 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         linha, score, empates = esq.localizar_linha(
             plan["tabela"], colunas_chave, chave_vals
         )
-       
+        confianca = f"{score:.0%}" if linha else "não encontrada"
+        if linha and empates > 1:
+            confianca += f" · {empates} linhas iguais"
         linhas_match.append(
             {
                 "_i": i,
                 "Portaria": rotulo(reg, i),
                 "Linha na planilha": linha,
+                "Confiança": confianca,
                 "Ação": "Atualizar" if linha else "Ignorar",
             }
         )
@@ -240,7 +266,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         },
     )
 
-    # ---- 3. Diferenças célula a célula ------------------------------------
+
     alteracoes = []
     for _, m in ed1.iterrows():
         i = int(m["_i"])
@@ -261,6 +287,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Portaria": rotulo(reg, i),
                         "Linha": str(linha),
                         "Coluna": a["coluna"],
+                        "_coluna_orig": a["coluna"],
                         "Atual": esq.texto_exibicao(a["atual"]),
                         "Novo": esq.texto_exibicao(a["novo"]),
                         "Tipo": a["tipo"],
@@ -280,6 +307,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Portaria": rotulo(reg, i),
                         "Linha": "nova",
                         "Coluna": cab,
+                        "_coluna_orig": cab,
                         "Atual": "",
                         "Novo": esq.texto_exibicao(v),
                         "Tipo": "nova linha",
@@ -297,24 +325,66 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         return
 
     df_alt = pd.DataFrame(alteracoes)
+
+    assinatura = f"{chave_cfg}_{hash_df(df_alt)}_{int(sobrescrever)}"
+    if st.session_state.get("alt_assinatura") != assinatura:
+        st.session_state["alt_assinatura"] = assinatura
+        st.session_state["alt_df"] = df_alt
+        st.session_state["alt_ver"] = 0
+    chave_editor = f"alt_{assinatura}_{st.session_state['alt_ver']}"
+
+
+    opcoes_novo = []
+    for reg in resultados:
+        for campo, v in reg.items():
+            if campo == "arquivo" or v in (None, ""):
+                continue
+            if isinstance(v, (str, int, float, date, datetime)):
+                opcoes_novo.append(esq.texto_exibicao(v).strip())
+    opcoes_novo += [v for v in df_alt["Novo"] if v]
+    opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
+
     st.caption(
-        "Desmarque o que não quiser gravar. A coluna 'Novo' é editável. "
+        "Desmarque o que não quiser gravar. Em 'Coluna' você escolhe, entre "
+        "todas as colunas da planilha, onde a informação será gravada, e em "
+        "'Novo', qual informação extraída das portarias será gravada ali. "
         "'Origem' mostra se o valor veio das regras ou da IA (confira os "
         "da IA com mais atenção)."
     )
     ed2 = st.data_editor(
-        df_alt,
+        st.session_state["alt_df"],
         hide_index=True,
         width="stretch",
-        key=f"alt_{chave_cfg}_{hash_df(df_alt)}_{int(sobrescrever)}",
-        disabled=[
-            "Portaria", "Linha", "Coluna", "Atual", "Tipo", "Origem",
-        ],
-        column_config={"_i": None, "_linha": None},
+        key=chave_editor,
+        on_change=sincronizar_alteracoes,
+        args=(chave_editor, plan["tabela"]),
+        disabled=["Portaria", "Linha", "Atual", "Tipo", "Origem"],
+        column_config={
+            "_i": None,
+            "_linha": None,
+            "_coluna_orig": None,
+            "Coluna": st.column_config.SelectboxColumn(
+                options=colunas, required=True
+            ),
+            "Novo": st.column_config.SelectboxColumn(
+                options=opcoes_novo, required=True
+            ),
+        },
     )
 
     selecionadas = int(ed2["Aplicar"].sum())
     st.caption(f"{selecionadas} de {len(ed2)} alteração(ões) selecionada(s).")
+
+    sel = ed2[ed2["Aplicar"]]
+
+    dup = sel.duplicated(subset=["_i", "_linha", "Coluna"], keep=False)
+    if dup.any():
+        st.warning(
+            "Mais de uma informação vai para a mesma coluna da mesma "
+            "portaria: "
+            + "; ".join(sorted(set(sel[dup]["Coluna"])))
+            + ". A última da lista prevalece."
+        )
 
     if st.button(
         "Aplicar à planilha",
@@ -367,11 +437,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             file_name=f"{res['nome']}_atualizada.xlsx",
             mime=XLSX_MIME,
         )
-
-
-# --------------------------------------------------------------------------
-# Tela principal
-# --------------------------------------------------------------------------
 
 arquivos = st.file_uploader(
     "Selecione uma ou mais portarias em PDF",
