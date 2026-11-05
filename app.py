@@ -159,17 +159,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         help="Desligado: só preenche células vazias. Alterações em células "
         "preenchidas aparecem desmarcadas na revisão.",
     )
-    usar_ia = o2.toggle(
-        "Usar IA nos campos sem correspondência automática",
-        value=ia_disponivel(),
-        disabled=not ia_disponivel(),
-    )
-    if not ia_disponivel():
-        st.caption(
-            "IA desativada. Para ativar: `pip install anthropic` e defina "
-            "a variável de ambiente ANTHROPIC_API_KEY."
-        )
-
+  
     if not colunas_chave:
         st.info("Escolha ao menos uma coluna-chave para continuar.")
         return
@@ -180,33 +170,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         valores, pendentes = resolver_por_regra(
             reg, colunas, sugerir_campo_para_cabecalho
         )
-
-        if usar_ia and pendentes:
-            try:
-                ia = consultar_ia(
-                    textos[i],
-                    json.dumps(reg, ensure_ascii=False, default=str),
-                    json.dumps(
-                        [
-                            {
-                                "campo": c,
-                                "exemplos": [
-                                    esq.texto_exibicao(v)
-                                    for v in plan["exemplos"][c]
-                                ],
-                            }
-                            for c in pendentes
-                        ],
-                        ensure_ascii=False,
-                    ),
-                )
-                for cab, v in ia.items():
-                    if v not in (None, ""):
-                        valores[cab] = (v, "IA")
-            except Exception as erro:
-                st.warning(
-                    f"IA indisponível para {rotulo(reg, i)}: {erro}"
-                )
 
         valores_por_reg.append(
             {
@@ -239,11 +202,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     )
 
     st.markdown("**1. Qual linha cada portaria atualiza**")
-    st.caption(
-        "Corrija o número da linha se a correspondência estiver errada. "
-        "Se a pessoa não existe na planilha, mude a ação para "
-        "'Adicionar nova'."
-    )
     ed1 = st.data_editor(
         df_match,
         hide_index=True,
@@ -340,13 +298,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     opcoes_novo += [v for v in df_alt["Novo"] if v]
     opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
 
-    st.caption(
-        "Desmarque o que não quiser gravar. Em 'Coluna' você escolhe, entre "
-        "todas as colunas da planilha, onde a informação será gravada, e em "
-        "'Novo', qual informação extraída das portarias será gravada ali. "
-        "'Origem' mostra se o valor veio das regras ou da IA (confira os "
-        "da IA com mais atenção)."
-    )
+
     ed2 = st.data_editor(
         st.session_state["alt_df"],
         hide_index=True,
@@ -485,12 +437,6 @@ if arquivos:
         df = pd.DataFrame(resultados)
         st.dataframe(df, width="stretch")
 
-        st.download_button(
-            "Baixar resultado em CSV",
-            data=df.to_csv(index=False).encode("utf-8-sig"),
-            file_name="informacoes_portarias.csv",
-            mime="text/csv",
-        )
 
         if arquivo_excel is not None:
             fluxo_planilha(resultados, textos, arquivo_excel)
