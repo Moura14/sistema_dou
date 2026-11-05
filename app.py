@@ -152,14 +152,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         help="A portaria atualiza a linha em que estas colunas coincidem.",
     )
 
-    o1, o2 = st.columns(2)
-    sobrescrever = o1.toggle(
-        "Sobrescrever células já preenchidas",
-        value=False,
-        help="Desligado: só preenche células vazias. Alterações em células "
-        "preenchidas aparecem desmarcadas na revisão.",
-    )
-  
     if not colunas_chave:
         st.info("Escolha ao menos uma coluna-chave para continuar.")
         return
@@ -235,7 +227,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             ):
                 alteracoes.append(
                     {
-                        "Aplicar": a["tipo"] == "preencher" or sobrescrever,
+                        "Aplicar": a["tipo"] == "preencher",
                         "_i": i,
                         "_linha": linha,
                         "Portaria": rotulo(reg, i),
@@ -280,7 +272,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
     df_alt = pd.DataFrame(alteracoes)
 
-    assinatura = f"{chave_cfg}_{hash_df(df_alt)}_{int(sobrescrever)}"
+    assinatura = f"{chave_cfg}_{hash_df(df_alt)}"
     if st.session_state.get("alt_assinatura") != assinatura:
         st.session_state["alt_assinatura"] = assinatura
         st.session_state["alt_df"] = df_alt
