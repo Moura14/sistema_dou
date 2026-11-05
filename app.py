@@ -224,15 +224,11 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         linha, score, empates = esq.localizar_linha(
             plan["tabela"], colunas_chave, chave_vals
         )
-        confianca = f"{score:.0%}" if linha else "não encontrada"
-        if linha and empates > 1:
-            confianca += f" · {empates} linhas iguais"
         linhas_match.append(
             {
                 "_i": i,
                 "Portaria": rotulo(reg, i),
                 "Linha na planilha": linha,
-                "Confiança": confianca,
                 "Ação": "Atualizar" if linha else "Ignorar",
             }
         )
