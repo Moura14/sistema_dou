@@ -237,12 +237,11 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Atual": esq.texto_exibicao(a["atual"]),
                         "Novo": esq.texto_exibicao(a["novo"]),
                         "Tipo": a["tipo"],
-                        "Origem": a["origem"],
                     }
                 )
 
         elif m["Ação"] == "Adicionar nova":
-            for cab, (v, origem) in valores.items():
+            for cab, (v, _) in valores.items():
                 if v in (None, ""):
                     continue
                 alteracoes.append(
@@ -257,7 +256,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Atual": "",
                         "Novo": esq.texto_exibicao(v),
                         "Tipo": "nova linha",
-                        "Origem": origem,
                     }
                 )
 
@@ -298,7 +296,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         key=chave_editor,
         on_change=sincronizar_alteracoes,
         args=(chave_editor, plan["tabela"]),
-        disabled=["Portaria", "Linha", "Atual", "Tipo", "Origem"],
+        disabled=["Portaria", "Linha", "Atual", "Tipo"],
         column_config={
             "_i": None,
             "_linha": None,
