@@ -270,6 +270,21 @@ def extrair_informacoes(texto):
             "texto_original_ato": limpar(bloco),
         })
 
+    registros = [
+        registro
+        for registro in registros
+        if any(
+            registro[campo]
+            for campo in (
+                "tipo_ato",
+                "nome",
+                "cargo",
+                "codigos_cargo",
+                "data_efeito",
+            )
+        )
+    ]
+
   
     if not registros:
 
