@@ -106,7 +106,7 @@ def extrair_codigo(bloco):
         re.IGNORECASE
     )
 
-    return list(dict.fromkeys(
+    return ", ".join(dict.fromkeys(
         codigo.upper().replace(" ", "")
         for codigo in codigos
     ))
