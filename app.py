@@ -297,27 +297,55 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         st.session_state["alt_assinatura"] = assinatura
         st.session_state["alt_df"] = df_alt
         st.session_state["alt_ver"] = 0
-    chave_editor = f"alt_{assinatura}_{st.session_state['alt_ver']}"
 
+    todas_portarias = "Todas as portarias"
+    portarias = list(
+        st.session_state["alt_df"]["Portaria"].drop_duplicates()
+    )
+    portaria_selecionada = st.selectbox(
+        "Portaria para visualizar",
+        [todas_portarias] + portarias,
+        key=f"filtro_portaria_{assinatura}",
+    )
+
+    df_completo = st.session_state["alt_df"]
+    if portaria_selecionada == todas_portarias:
+        indices = list(df_completo.index)
+        registros_visiveis = resultados
+    else:
+        indices = list(
+            df_completo.index[
+                df_completo["Portaria"] == portaria_selecionada
+            ]
+        )
+        indices_registros = df_completo.loc[indices, "_i"].drop_duplicates()
+        registros_visiveis = [
+            resultados[int(i)] for i in indices_registros
+        ]
 
     opcoes_novo = []
-    for reg in resultados:
+    for reg in registros_visiveis:
         for campo, v in reg.items():
             if campo == "arquivo" or v in (None, ""):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
                 opcoes_novo.append(texto_exibicao(v).strip())
-    opcoes_novo += [v for v in df_alt["Novo"] if v]
+    opcoes_novo += [
+        v for v in df_completo.loc[indices, "Novo"] if v
+    ]
     opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
 
-
+    chave_editor = (
+        f"alt_{assinatura}_{st.session_state['alt_ver']}_"
+        f"{hashlib.md5(portaria_selecionada.encode('utf-8')).hexdigest()[:8]}"
+    )
     ed2 = st.data_editor(
-        st.session_state["alt_df"],
+        df_completo.loc[indices].reset_index(drop=True),
         hide_index=True,
         width="stretch",
         key=chave_editor,
         on_change=sincronizar_alteracoes,
-        args=(chave_editor, plan["tabela"]),
+        args=(chave_editor, plan["tabela"], indices),
         disabled=["Portaria", "Linha", "Atual", "Tipo"],
         column_config={
             "_i": None,
@@ -332,10 +360,14 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         },
     )
 
-    selecionadas = int(ed2["Aplicar"].sum())
-    st.caption(f"{selecionadas} de {len(ed2)} alteração(ões) selecionada(s).")
+    df_alteracoes = st.session_state["alt_df"]
+    selecionadas = int(df_alteracoes["Aplicar"].sum())
+    st.caption(
+        f"{selecionadas} de {len(df_alteracoes)} alteração(ões) selecionada(s). "
+        "O filtro altera apenas a visualização."
+    )
 
-    sel = ed2[ed2["Aplicar"]]
+    sel = df_alteracoes[df_alteracoes["Aplicar"]]
 
     dup = sel.duplicated(subset=["_i", "_linha", "Coluna"], keep=False)
     if dup.any():
@@ -352,7 +384,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         disabled=selecionadas == 0,
     ):
         atualizacoes, novas = [], {}
-        for _, a in ed2[ed2["Aplicar"]].iterrows():
+        for _, a in df_alteracoes[df_alteracoes["Aplicar"]].iterrows():
             valor = converter_valor(a["Novo"], plan["tipos"][a["Coluna"]])
             if valor is None:
                 continue
