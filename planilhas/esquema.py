@@ -1,12 +1,25 @@
 
+import math
+import numbers
 import re
 import unicodedata
 from datetime import date, datetime
 
 FORMATOS_DATA = ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%m-%Y")
 
-def normalizar(valor) -> str:
+
+def valor_vazio(valor) -> bool:
     if valor is None:
+        return True
+    if isinstance(valor, str):
+        return not valor.strip()
+    if isinstance(valor, numbers.Real):
+        return math.isnan(valor)
+    return False
+
+
+def normalizar(valor) -> str:
+    if valor_vazio(valor):
         return ""
     if isinstance(valor, (datetime, date)):
         return valor.strftime("%d/%m/%Y")
@@ -28,12 +41,10 @@ def texto_exibicao(valor) -> str:
 
 
 def converter_valor(valor, tipo: str):
-    if valor is None:
+    if valor_vazio(valor):
         return None
     if isinstance(valor, str):
         valor = valor.strip()
-        if valor == "":
-            return None
 
     if tipo == "data":
         if isinstance(valor, datetime):
@@ -67,5 +78,4 @@ def _tipo_coluna(valores) -> str:
     ):
         return "numero"
     return "texto"
-
 
