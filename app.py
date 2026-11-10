@@ -298,30 +298,25 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         st.session_state["alt_df"] = df_alt
         st.session_state["alt_ver"] = 0
 
-    todas_portarias = "Todas as portarias"
     portarias = list(
         st.session_state["alt_df"]["Portaria"].drop_duplicates()
     )
     portaria_selecionada = st.selectbox(
         "Portaria para visualizar",
-        [todas_portarias] + portarias,
-        key=f"filtro_portaria_{assinatura}",
+        portarias,
+        key=f"filtro_portaria_unica_{assinatura}",
     )
 
     df_completo = st.session_state["alt_df"]
-    if portaria_selecionada == todas_portarias:
-        indices = list(df_completo.index)
-        registros_visiveis = resultados
-    else:
-        indices = list(
-            df_completo.index[
-                df_completo["Portaria"] == portaria_selecionada
-            ]
-        )
-        indices_registros = df_completo.loc[indices, "_i"].drop_duplicates()
-        registros_visiveis = [
-            resultados[int(i)] for i in indices_registros
+    indices = list(
+        df_completo.index[
+            df_completo["Portaria"] == portaria_selecionada
         ]
+    )
+    indices_registros = df_completo.loc[indices, "_i"].drop_duplicates()
+    registros_visiveis = [
+        resultados[int(i)] for i in indices_registros
+    ]
 
     opcoes_novo = []
     for reg in registros_visiveis:
