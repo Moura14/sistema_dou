@@ -377,7 +377,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             "_linha": None,
             "_coluna_orig": None,
             "Novo": st.column_config.SelectboxColumn(
-                options=opcoes_novo, required=False
+                options=opcoes_novo, required=False, width=250
             ),
             "Novo manual": st.column_config.TextColumn(
                 help=(
