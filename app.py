@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from services.leitor_pdf import extrair_texto_pdf
+from planilhas.esquema import texto_exibicao, normalizar, converter_valor
 from extracao.portaria import (
     extrair_informacoes,
     sugerir_campo_para_cabecalho,
@@ -15,7 +16,27 @@ from extracao.por_esquema import (
     ia_disponivel,
     resolver_por_regra,
 )
-from planilhas import esquma as esq
+from planilhas.leitura import (
+    listar_abas,
+    detectar_linha_cabecalho,
+    ler_planilha,
+)
+
+from planilhas.correspondencia import (
+    sugerir_colunas_chave,
+    localizar_linha,
+)
+
+from planilhas.alteracoes import (
+    calcular_alteracoes,
+    aplicar_alteracoes,
+)
+
+from planilhas.configuracoes import (
+    chave_planilha,
+    carregar_config,
+    salvar_config,
+)
 
 
 st.set_page_config(
@@ -46,8 +67,8 @@ def processar_pdf(conteudo: bytes):
 
 
 @st.cache_data(show_spinner=False)
-def carregar_planilha(conteudo: bytes, aba: str, linha_cab):
-    return esq.ler_planilha(conteudo, aba, linha_cab)
+def carregar_planilha(conteudo, aba, linha_cab):
+    return ler_planilha(conteudo, aba, linha_cab)
 
 
 @st.cache_data(show_spinner="Consultando a IA nos campos sem correspondência...")
@@ -69,19 +90,20 @@ def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
 
 
-def sincronizar_alteracoes(chave_editor: str, tabela: dict) -> None:
+def sincronizar_alteracoes(chave_editor: str, tabela: dict, indices: list) -> None:
     df = st.session_state["alt_df"]
     edicoes = st.session_state.get(chave_editor, {}).get("edited_rows", {})
 
     for pos, mudancas in edicoes.items():
+        idx = indices[int(pos)]          # posição no recorte -> índice no alt_df
         for coluna, valor in mudancas.items():
-            df.at[int(pos), coluna] = valor
+            df.at[idx, coluna] = valor
 
     for pos in df.index:
         linha = int(df.at[pos, "_linha"])
-        if linha == 0:  # linha nova: não há valor atual
+        if linha == 0:
             continue
-        atual = esq.texto_exibicao(
+        atual = texto_exibicao(
             tabela.get(linha, {}).get(df.at[pos, "Coluna"])
         )
         df.at[pos, "Atual"] = atual
@@ -98,7 +120,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     conteudo = arquivo_excel.getvalue()
 
     c1, c2 = st.columns([3, 1])
-    aba = c1.selectbox("Aba da planilha", esq.listar_abas(conteudo))
+    aba = c1.selectbox("Aba da planilha", listar_abas(conteudo))
     detectada = carregar_planilha(conteudo, aba, None)["linha_cab"]
     linha_cab = int(
         c2.number_input(
@@ -119,8 +141,8 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         )
         return
 
-    chave_cfg = esq.chave_planilha(colunas)
-    cfg = esq.carregar_config(chave_cfg)
+    chave_cfg = chave_planilha(colunas)
+    cfg = carregar_config(chave_cfg)
 
     with st.expander("Campos encontrados na planilha"):
         st.dataframe(
@@ -130,7 +152,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Campo": n,
                         "Tipo": plan["tipos"][n],
                         "Exemplos": " | ".join(
-                            esq.texto_exibicao(v) for v in plan["exemplos"][n]
+                            texto_exibicao(v) for v in plan["exemplos"][n]
                         ),
                     }
                     for n in colunas
@@ -142,7 +164,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
     padrao_chave = [
         c for c in cfg.get("colunas_chave", []) if c in colunas
-    ] or esq.sugerir_colunas_chave(colunas)
+    ] or sugerir_colunas_chave(colunas)
 
     colunas_chave = st.multiselect(
         "Como encontrar a linha existente? (coluna-chave)",
@@ -165,7 +187,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
         valores_por_reg.append(
             {
-                cab: (esq.converter_valor(v, plan["tipos"][cab]), origem)
+                cab: (converter_valor(v, plan["tipos"][cab]), origem)
                 for cab, (v, origem) in valores.items()
             }
         )
@@ -176,7 +198,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             c: valores_por_reg[i].get(c, (None, None))[0]
             for c in colunas_chave
         }
-        linha, score, empates = esq.localizar_linha(
+        linha, score, empates = localizar_linha(
             plan["tabela"], colunas_chave, chave_vals
         )
         linhas_match.append(
@@ -222,7 +244,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         if m["Ação"] == "Atualizar" and pd.notna(m["Linha na planilha"]):
             linha = int(m["Linha na planilha"])
             atuais = plan["tabela"].get(linha, {})
-            for a in esq.calcular_alteracoes(
+            for a in calcular_alteracoes(
                 atuais, valores, excluir=colunas_chave
             ):
                 alteracoes.append(
@@ -234,8 +256,8 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Linha": str(linha),
                         "Coluna": a["coluna"],
                         "_coluna_orig": a["coluna"],
-                        "Atual": esq.texto_exibicao(a["atual"]),
-                        "Novo": esq.texto_exibicao(a["novo"]),
+                        "Atual": texto_exibicao(a["atual"]),
+                        "Novo": texto_exibicao(a["novo"]),
                         "Tipo": a["tipo"],
                     }
                 )
@@ -254,7 +276,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": esq.texto_exibicao(v),
+                        "Novo": texto_exibicao(v),
                         "Tipo": "nova linha",
                     }
                 )
@@ -284,7 +306,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             if campo == "arquivo" or v in (None, ""):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
-                opcoes_novo.append(esq.texto_exibicao(v).strip())
+                opcoes_novo.append(texto_exibicao(v).strip())
     opcoes_novo += [v for v in df_alt["Novo"] if v]
     opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
 
@@ -331,7 +353,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ):
         atualizacoes, novas = [], {}
         for _, a in ed2[ed2["Aplicar"]].iterrows():
-            valor = esq.converter_valor(a["Novo"], plan["tipos"][a["Coluna"]])
+            valor = converter_valor(a["Novo"], plan["tipos"][a["Coluna"]])
             if valor is None:
                 continue
             if int(a["_linha"]) == 0:
@@ -342,7 +364,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                 )
 
         try:
-            res = esq.aplicar_alteracoes(
+            res = aplicar_alteracoes(
                 conteudo,
                 aba,
                 plan,
@@ -352,7 +374,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             res["nome"] = arquivo_excel.name.rsplit(".", 1)[0]
             res["origem"] = arquivo_excel.name
             st.session_state["res_esquema"] = res
-            esq.salvar_config(chave_cfg, {"colunas_chave": colunas_chave})
+            salvar_config(chave_cfg, {"colunas_chave": colunas_chave})
         except Exception as erro:
             st.session_state.pop("res_esquema", None)
             st.error(f"Erro ao atualizar a planilha: {erro}")
