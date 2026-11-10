@@ -14,6 +14,7 @@ ACOES = {
     "Recondução": "RECONDUZIR",
     "Redistribuição": "REDISTRIBUIR",
     "Tornar sem efeito": "TORNAR SEM EFEITO",
+    "Demissão": "DEMITIR",
 }
 
 _RAIZES = (
@@ -21,11 +22,11 @@ _RAIZES = (
     ("design", "Designação"), ("aposent", "Aposentadoria"), ("ced", "Cessão"),
     ("revog", "Revogação"), ("recondu", "Recondução"),
     ("redistribu", "Redistribuição"), ("tornar", "Tornar sem efeito"),
-    ("tornad", "Tornar sem efeito"),
+    ("tornad", "Tornar sem efeito"), ("demit", "Demissão"),
 )
-_INF = (r"tornar\s+sem\s+efeito|nomear|exonerar|dispensar|designar|aposentar|ceder|revogar|"
+_INF = (r"tornar\s+sem\s+efeito|demitir|nomear|exonerar|dispensar|designar|aposentar|ceder|revogar|"
         r"reconduzir|redistribuir")
-_PART = (r"tornad[oa]s?\s+sem\s+efeito|nomead[oa]s?|exonerad[oa]s?|dispensad[oa]s?|designad[oa]s?|"
+_PART = (r"tornad[oa]s?\s+sem\s+efeito|demitid[oa]s?|nomead[oa]s?|exonerad[oa]s?|dispensad[oa]s?|designad[oa]s?|"
          r"aposentad[oa]s?|cedid[oa]s?|revogad[oa]s?|reconduzid[oa]s?|"
          r"redistribuíd[oa]s?")
 RE_INFINITIVO = re.compile(rf"\b(?:{_INF})\b", re.I)
@@ -33,8 +34,9 @@ RE_ACAO = re.compile(rf"\b({_INF}|{_PART})\b", re.I)
 RE_PASSADO = re.compile(
     r"\bque\s+(?:nomeou|exonerou|dispensou|designou|aposentou|cedeu|revogou|"
     r"reconduziu|redistribuiu)\b", re.I)
-RE_PORTARIA_REF = re.compile(r"\bPortaria\s+n\s*[º°o.]?\s*(\d+(?:\.\d+)*)", re.I)
-RE_VIGOR = re.compile(r"entra\s+em\s+vigor\s+na\s+data\s+de\s+sua\s+publicação", re.I)
+RE_PORTARIA_REF = re.compile(
+    r"\bPortaria(?:\s+([A-Z][A-Za-z/.\-]*))?\s+n\s*[º°o.]?\s*(\d+(?:\.\d+)*)", re.I)
+RE_VIGOR = re.compile(r"entra\s+em\s+vigor\s+na\s+data\s+d[ea]\s+(?:sua|presente)\s+publicação", re.I)
 RE_RESOLVE = re.compile(r"\bresolve(?:m)?\s*:?", re.I)
 
 MESES = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho",
@@ -43,14 +45,24 @@ _NUM_MES = {m: i for i, m in enumerate(MESES, 1)}
 _MESES_RE = "|".join(MESES).replace("marco", "mar[cç]o").upper()
 
 
+
+
 def _sem_acento(s):
     return unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii").lower()
 
 
+_RE_LIXO = re.compile(
+    r"(?mi)^[^\n]*(?:ISSN\s*\d|Documento assinado digitalmente|Este documento pode ser verificado|"
+    r"que institui a Infraestrutura|autenticidade\.html|DI[ÁA]RIO OFICIAL DA UNI[ÃA]O\s*-\s*Se)[^\n]*$"
+    r"|^\s*Se[çc][ãa]o\s+\d+\s*$"
+    r"|^\s*Nº\s+\d+,\s*(?:segunda|terça|quarta|quinta|sexta)-feira[^\n]*$"
+)
+
+
 def normalizar_texto(texto):
+    texto = _RE_LIXO.sub("", texto)           
     texto = texto.replace("\xa0", " ").replace("\u00ad", "")
-    texto = re.sub(r"(\w)-\n(?=[a-zà-ú])", r"\1", texto)  # hifenização de PDF
-    # "... FCE 1.15. Nº 1.105 - DESIGNAR ..." na mesma linha -> quebra antes do "Nº"
+    texto = re.sub(r"(\w)-\n(?=[a-zà-ú])", r"\1", texto)  
     texto = re.sub(r"(?<=[.;])[ \t]+(?=N[º°]\s*\d[\d.]*\s*[-–—]\s)", "\n", texto)
     linhas = [re.sub(r"[ \t]+", " ", l).strip() for l in texto.splitlines()]
     return "\n".join(l for l in linhas if l)
@@ -63,7 +75,6 @@ def limpar(texto):
 
 
 def normalizar_data(txt):
-    """'1º de novembro de 2026' / '05/11/2026' -> '01/11/2026'."""
     if not txt:
         return None
     t = _sem_acento(txt)
@@ -76,15 +87,12 @@ def normalizar_data(txt):
     return limpar(txt)
 
 
-
-
 def _tipo_do_verbo(verbo):
     v = verbo.lower()
     return next((tipo for raiz, tipo in _RAIZES if v.startswith(raiz)), None)
 
 
 def _inicio_dispositivo(texto):
-    """Posição logo após 'resolve:' (evita verbos do preâmbulo)."""
     m = RE_RESOLVE.search(texto)
     return m.end() if m else 0
 
@@ -97,10 +105,13 @@ def identificar_acao(texto):
 
 
 def dividir_atos(corpo):
-    """'Exonerar X ... e nomear Y ...' -> dois trechos, um por verbo."""
-    marcas = [m.start() for m in RE_INFINITIVO.finditer(corpo, _inicio_dispositivo(corpo))]
+    ini = _inicio_dispositivo(corpo)
+    marcas = [m.start() for m in RE_INFINITIVO.finditer(corpo, ini)]
+    if not marcas and ini:          
+        ini = 0
+        marcas = [m.start() for m in RE_INFINITIVO.finditer(corpo)]
     if len(marcas) <= 1:
-        return [corpo]
+        return [corpo[ini:]] if ini else [corpo]
     marcas.append(len(corpo))
     return [corpo[a:b] for a, b in zip(marcas, marcas[1:])]
 
@@ -109,14 +120,19 @@ def dividir_atos(corpo):
 
 _PAL = r"[A-ZÀ-Ý][A-ZÀ-Ýa-zà-ÿ'’\-]*"
 _NOME = _PAL + r"(?:\s+(?:d[aeo]s?\s+|e\s+)?" + _PAL + r"){1,8}"
+_DATA_CURTA = r"\d{1,2}[º°]?\s+de\s+[a-zç]+\s+de\s+\d{4}|\d{1,2}[º°]?/\d{1,2}/\d{4}"
 _RE_NOME = re.compile(
     r"^[\s,:;\-]*"
-    r"(?:(?:a\s+pedido|de\s+ofício)\s*,?\s*)?"
+    r"(?:(?:a\s+pedido|de\s+ofício|a\s+(?:contar|partir)\s+d[eo]\s+(?:" + _DATA_CURTA + r"))\s*,?\s*)*"
     r"(?:(?:o|a)\s+)?"
-    r"(?:(?:Senhor|Senhora|Sr|Sra)\.?\s+)?"
+    r"(?:(?:servidor|servidora|Senhor|Senhora|Sr|Sra)\.?\s+)?"
     r"(" + _NOME + r")"
     r"(?=\s*[,(;]|\s+(?:para|do|da|no|na|CPF|matrícula|SIAPE|ocupante)\b)"
 )
+_MAIUSC = r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ]+){1,8}"
+_RE_NOME_PASSIVO = re.compile(r"(" + _MAIUSC + r")\s+para\s+exercer")
+_RE_NOME_SOLTO = re.compile(
+    r"(" + _MAIUSC + r")(?=\s*(?:,|\s+da\s+função|\s+do\s+cargo|\s+para\s+exercer|\s+do\s+emprego))")
 _NAO_NOME = {"cargo", "funcao", "ministro", "ministra", "portaria", "chefe",
              "diretor", "diretora", "secretario", "secretaria", "coordenador",
              "coordenadora", "gabinete", "assessor", "assessora"}
@@ -136,45 +152,49 @@ def _nome_valido(nome):
 def extrair_nome_depois_acao(texto, resultado_acao):
     if not resultado_acao:
         return None
-    janela = texto[resultado_acao.end(): resultado_acao.end() + 250]
-    m = _RE_NOME.search(janela)
-    return _nome_valido(limpar(m.group(1))) if m else None
-
-
+    resto = texto[resultado_acao.end():]
+    m = _RE_NOME.search(resto[:250])
+    if m:
+        return _nome_valido(limpar(m.group(1)))
+    for padrao in (_RE_NOME_PASSIVO, _RE_NOME_SOLTO):
+        m = padrao.search(resto[:400])
+        if m and _nome_valido(limpar(m.group(1))):
+            return _nome_valido(limpar(m.group(1)))
+    return None
 
 
 _PARADA_CARGO = (
-    r"(?=\s*[,;:]"
+    r"(?=\s*(?:,(?!\s*(?-i:[A-ZÀ-Ý][a-zà-ÿ]))|[;:])"
     r"|\s+(?:código|(?-i:CCE|FCE|FCPE|DAS|FG|CD|NE))\b"
     r"|\.(?:\s|$)|\s+a\s+partir\b|\s+ficando\b|\s+e\s*$|$)"
 )
-
 _RE_CARGO = re.compile(
-    r"\b(?:cargo|função|emprego)"
+    r"\b(?:cargo|função|emprego|mandato|encargo)"
     r"(?:\s+(?:em\s+comissão|de\s+confiança|de\s+natureza\s+especial|"
     r"comissionad[oa]|efetiv[oa]))*"
     r"(?:\s+(?-i:[A-ZÀ-Ý][\wà-ÿ\-]*)){0,3}"
     r"\s+de\s+(.{1,220}?)" + _PARADA_CARGO,
     re.I | re.S,
 )
-
 _RE_CARGO_APOS_CPF = re.compile(
     r"CPF\s*(?:n[ºo°]\s*)?[\d*.\-]+\s*,\s*(.{3,150}?)\s*"
     r"(?=,\s*(?:código|(?-i:CCE|FCE|FCPE|DAS|FG|CD|NE))\b)",
     re.I | re.S,
 )
+_RE_CARGO_APOS_NOME = re.compile(r",\s*([^,]{3,120}?),\s*[Mm]atrícula\s+(?i:siape)")
 _RE_CODIGO = re.compile(
-    r"\b(CCE|FCE|FCPE|DAS|FG|CD|CGE|FUC|FST|NE)[\s\-]*(\d+(?:[.,]\d+)*)\b"
+    r"\b((?i:CCE|FCE|FCPE)|DAS|FG|CD|CGE|FUC|FST|NE)[\s\-]*(\d+(?:[.,]\d+)*)\b"
 )
 
 
 def extrair_cargo(bloco):
-    m = _RE_CARGO.search(bloco) or _RE_CARGO_APOS_CPF.search(bloco)
+    m = (_RE_CARGO.search(bloco) or _RE_CARGO_APOS_CPF.search(bloco)
+         or _RE_CARGO_APOS_NOME.search(bloco))
     return limpar(m.group(1)) if m else None
 
 
 def extrair_codigo(bloco):
-    codigos = (f"{s}{n}" for s, n in _RE_CODIGO.findall(bloco))
+    codigos = (f"{s.upper()}{n}" for s, n in _RE_CODIGO.findall(bloco))
     return ", ".join(dict.fromkeys(codigos))
 
 
@@ -195,9 +215,7 @@ def extrair_data_efeito(bloco):
 
 
 
-
 _REGRAS = (
-   
     ("codigos_cargo", {"codigo"}, set(), set()),
     ("codigos_cargo", set(), {"cce", "fce"}, set()),
     ("texto_original_ato", {"texto"}, set(), set()),
@@ -241,36 +259,74 @@ def sugerir_campo_para_cabecalho(cabecalho, campos_disponiveis):
     return None
 
 
-
-
 _RE_PUBLICACAO = re.compile(r"Publicado em:\s*(\d{2}/\d{2}/\d{4})", re.I)
 _RE_ORGAO = re.compile(r"Órgão:\s*([^\n]+)", re.I)
+_FIM_TITULO = r"[ \t]*(?:[-–—(*][^\n]{0,60})?$"
+_DATA_TITULO = r"\d{1,2}\s*[º°]?\s+DE\s+(?:" + _MESES_RE + r")\s+DE\s+\d{4}"
 _RE_DATA_CAB = re.compile(
-    r"(?m)^\s*PORTARIAS?\b[^\n]*?\bDE\s+(\d{1,2}\s*[º°]?\s+DE\s+(?:"
-    + _MESES_RE + r")\s+DE\s+\d{4})"
-)
+    r"(?im)^\s*PORTARIAS?\b[^\n]*?\bDE\s+(" + _DATA_TITULO + r")" + _FIM_TITULO)
+_RE_NUM_TITULO = re.compile(
+    r"(?im)^\s*(?:PORTARIAS?\b(?P<sigla>[^\n]*?))?"
+    r"\bN\s*[º°.]?\s*(?P<num>\d+(?:\.\d+)*)\s*,?\s*DE\s+" + _DATA_TITULO + _FIM_TITULO)
+_RE_NUM_ITEM = re.compile(
+    r"(?m)^\s*(?P<sigla>)N\s*[º°.]?\s*(?P<num>\d+(?:\.\d+)*)\s*[-–—]\s")
 _RE_NUMERO = re.compile(
-    r"(?m)^\s*(?:PORTARIAS?\b[^\n]*?)?"
-    r"\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
+    r"(?im)^\s*(?:PORTARIAS?\b(?P<sigla>[^\n]*?))?"
+    r"\bN\s*[º°.]?\s*(?P<num>\d+(?:\.\d+)*)"
     r"\s*(?=(?:[-–—]\s*|,?\s+DE\b))"
 )
-_RE_MINISTERIO = re.compile(r"(?m)^\s*(MINISTÉRIO[^\n]{0,100})$")
-_RE_CORTE = re.compile(r"(?m)^\s*(?:MINISTÉRIO|PRESIDÊNCIA DA REPÚBLICA)\b")
+
+
+def _achar_ocorrencias(texto):
+    achados = sorted(list(_RE_NUM_TITULO.finditer(texto)) + list(_RE_NUM_ITEM.finditer(texto)),
+                     key=lambda m: m.start())
+    return achados or list(_RE_NUMERO.finditer(texto))
+
+
+_UNID = (r"(?:GABINETE|SECRETARIA|SUBSECRETARIA|DEPARTAMENTO|DIRETORIA|COORDENAÇÃO|CONSELHO|"
+         r"COMANDO|INSTITUTO|AGÊNCIA|FUNDAÇÃO|UNIVERSIDADE|PROCURADORIA|CORREGEDORIA|ESCRITÓRIO)")
+_P_MIN = (r"(?:((?:MINISTÉRIO|PRESIDÊNCIA DA REPÚBLICA)[ \t]*[A-ZÀ-Ý \-/]{0,70}?)[ \t]*$"
+          r"|((?:Ministério)[ \t][^\n,.]{3,70}|Presidência da República)[ \t]*$"
+          r"(?=\n[ \t]*(?:PORTARIA|" + _UNID + r")))")
+_P_UNI = r"(" + _UNID + r"\b[A-ZÀ-Ý \-/]{0,60})[ \t]*$"
+_RE_MINISTERIO = re.compile(r"(?m)^[ \t]*" + _P_MIN)
+_RE_UNIDADE = re.compile(r"(?m)^[ \t]*" + _P_UNI)
+_RE_CORTE = re.compile(r"(?m)^[ \t]*(?:" + _P_MIN + "|" + _P_UNI + ")")
+_RE_DATA_DOU = re.compile(
+    r"(?:(?:segunda|terça|quarta|quinta|sexta)-feira|sábado|domingo),\s*"
+    r"(\d{1,2}\s+de\s+[A-Za-zçÇ]+\s+de\s+\d{4})", re.I)
+_MINUSC = {"de", "do", "da", "dos", "das", "e"}
 _RE_TITULO = re.compile(
-    r"(?m)^\s*PORTARIAS?\b[^\n]*?\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
+    r"(?im)^\s*PORTARIAS?\b[^\n]*?\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
     r"\s*,?\s*DE\s+([^\n]+)"
 )
 _CAMPOS_UTEIS = ("tipo_ato", "nome", "cargo", "codigos_cargo", "data_efeito")
 
 
 def _por_posicao(itens, pos, primeiro_se_nenhum=False):
-    """Último item (posição, valor) que começa antes de `pos`."""
     if not itens:
         return None
     i = bisect_right([p for p, _ in itens], pos) - 1
     if i < 0:
         return itens[0][1] if primeiro_se_nenhum else None
     return itens[i][1]
+
+
+def _data_na_abertura(bloco):
+    m = re.search(r"\bDE\s+(" + _DATA_TITULO + r")", bloco[:200], re.I)
+    return normalizar_data(m.group(1)) if m else None
+
+
+def _ultimo(itens, pos):
+    i = bisect_right([p for p, _ in itens], pos) - 1
+    return itens[i] if i >= 0 else (-1, None)
+
+
+def _titulo(txt):
+    if not txt or not txt.isupper():
+        return txt
+    pal = txt.lower().split()
+    return " ".join(p if (k and p in _MINUSC) else p.capitalize() for k, p in enumerate(pal))
 
 
 def _ministerio_do_orgao(orgao):
@@ -285,10 +341,15 @@ def _registros_do_bloco(base, bloco, corpo):
         ref, trecho = None, ato
         if tipo == "Tornar sem efeito" and acao:
             r = RE_PORTARIA_REF.search(ato, acao.end())
-            ref = r.group(1) if r else None
+            ref = " ".join(filter(None, r.groups())) if r else None
             passado = RE_PASSADO.search(ato, acao.end())   
             if passado:                                    
                 acao, trecho = passado, ato[passado.end():]
+        cargo = extrair_cargo(trecho)
+        encargo = None
+        if cargo and re.match(r"substitut[oa]\s+eventual\b", cargo, re.I):
+            encargo = "Substituto eventual"     
+            cargo = extrair_cargo(cargo) or cargo
         efeito = extrair_data_efeito(ato) or data_bloco
         if not efeito and RE_VIGOR.search(corpo):
             efeito = base["data_publicacao"]
@@ -296,7 +357,8 @@ def _registros_do_bloco(base, bloco, corpo):
             **base,
             "tipo_ato": tipo,
             "nome": extrair_nome_depois_acao(ato, acao),
-            "cargo": extrair_cargo(trecho),
+            "cargo": cargo,
+            "encargo": encargo,
             "codigos_cargo": extrair_codigo(trecho),
             "data_efeito": efeito,
             "portaria_referida": ref,
@@ -306,47 +368,81 @@ def _registros_do_bloco(base, bloco, corpo):
 
 
 def extrair_informacoes(texto):
+    cab = _RE_DATA_DOU.search(texto)            
     texto = normalizar_texto(texto)
 
     pub = _RE_PUBLICACAO.search(texto)
     org = _RE_ORGAO.search(texto)
-    comum = {
-        "data_publicacao": pub.group(1) if pub else None,
-        "orgao": limpar(org.group(1)) if org else None,
-    }
+    publicacao = pub.group(1) if pub else (normalizar_data(cab.group(1)) if cab else None)
+    orgao_global = limpar(org.group(1)) if org else None
+
     datas = [(m.start(), normalizar_data(m.group(1))) for m in _RE_DATA_CAB.finditer(texto)]
-    ministerios = [(m.start(), limpar(m.group(1))) for m in _RE_MINISTERIO.finditer(texto)]
-    ocorrencias = list(_RE_NUMERO.finditer(texto))
+    ministerios = [(m.start(), _titulo(limpar(m.group(1) or m.group(2))))
+                   for m in _RE_MINISTERIO.finditer(texto)]
+    unidades = [(m.start(), _titulo(limpar(m.group(1)))) for m in _RE_UNIDADE.finditer(texto)]
+    ocorrencias = _achar_ocorrencias(texto)
 
     registros = []
     for i, oc in enumerate(ocorrencias):
         inicio = oc.start()
         fim = ocorrencias[i + 1].start() if i + 1 < len(ocorrencias) else len(texto)
         bloco = texto[inicio:fim]
-        corte = _RE_CORTE.search(bloco)         
+        corte = _RE_CORTE.search(bloco)     
         if corte:
             bloco = bloco[:corte.start()]
         corpo = bloco[oc.end() - inicio:]
+
+        pos_min, ministerio = _ultimo(ministerios, inicio)
+        pos_uni, unidade = _ultimo(unidades, inicio)
+        if unidade and pos_uni < pos_min:      
+            unidade = None
+        ministerio = ministerio or _ministerio_do_orgao(orgao_global)
+        orgao = orgao_global or (f"{ministerio}/{unidade}" if ministerio and unidade else ministerio)
+
         base = {
-            "numero_portaria": oc.group(1),
-            "data_portaria": _por_posicao(datas, inicio, primeiro_se_nenhum=True),
-            "data_publicacao": comum["data_publicacao"],
-            "orgao": comum["orgao"],
-            "ministerio": _por_posicao(ministerios, inicio) or _ministerio_do_orgao(comum["orgao"]),
+            "numero_portaria": oc.group("num"),
+            "sigla_portaria": limpar(oc.group("sigla")),
+            "data_portaria": (_por_posicao(datas, inicio, primeiro_se_nenhum=True)
+                              or _data_na_abertura(bloco)),
+            "data_publicacao": publicacao,
+            "orgao": orgao,
+            "ministerio": ministerio,
         }
         registros += _registros_do_bloco(base, bloco, corpo)
 
-    if not registros:                         
+    if not registros:                            
         t = _RE_TITULO.search(texto)
         if t:
             base = {
                 "numero_portaria": t.group(1),
+                "sigla_portaria": None,
                 "data_portaria": normalizar_data(t.group(2)),
-                **comum,
-                "ministerio": _ministerio_do_orgao(comum["orgao"]),
+                "data_publicacao": publicacao,
+                "orgao": orgao_global,
+                "ministerio": _ministerio_do_orgao(orgao_global),
             }
             registros = _registros_do_bloco(base, texto, texto[t.end():])
     return registros
+
+
+def ler_pdf(caminho):
+    try:
+        import pdfplumber
+    except ImportError as e:
+        raise ImportError("instale com: pip install pdfplumber") from e
+    partes = []
+    with pdfplumber.open(caminho) as pdf:
+        for pag in pdf.pages:
+            x0, topo, x1, base = pag.bbox
+            meio = (x0 + x1) / 2
+            palavras = pag.extract_words()
+            cruzam = sum(1 for w in palavras if w["x0"] < meio - 2 and w["x1"] > meio + 2)
+            if palavras and cruzam / len(palavras) < 0.02:    
+                for caixa in ((x0, topo, meio, base), (meio, topo, x1, base)):
+                    partes.append(pag.crop(caixa).extract_text() or "")
+            else:                                                 
+                partes.append(pag.extract_text() or "")
+    return "\n".join(partes)
 
 
 def diagnosticar_sem_cargo(registros, janela=220):
