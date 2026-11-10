@@ -95,22 +95,25 @@ def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
 
 
-def sincronizar_alteracoes(chave_editor: str, tabela: dict) -> None:
+def sincronizar_alteracoes(
+    chave_editor: str, tabela: dict, indices: list[int]
+) -> None:
     df = st.session_state["alt_df"]
     edicoes = st.session_state.get(chave_editor, {}).get("edited_rows", {})
 
     for pos, mudancas in edicoes.items():
+        indice_df = indices[int(pos)]
         for coluna, valor in mudancas.items():
-            df.at[int(pos), coluna] = valor
+            df.at[indice_df, coluna] = valor
 
         if "Novo" in mudancas or "Novo manual" in mudancas:
-            manual = df.at[int(pos), "Novo manual"]
+            manual = df.at[indice_df, "Novo manual"]
             novo = (
                 manual
                 if not valor_vazio(manual)
-                else df.at[int(pos), "Novo"]
+                else df.at[indice_df, "Novo"]
             )
-            df.at[int(pos), "Aplicar"] = not valor_vazio(novo)
+            df.at[indice_df, "Aplicar"] = not valor_vazio(novo)
 
     for pos in df.index:
         linha = int(df.at[pos, "_linha"])
@@ -341,27 +344,50 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         st.session_state["alt_assinatura"] = assinatura
         st.session_state["alt_df"] = df_alt
         st.session_state["alt_ver"] = 0
-    chave_editor = f"alt_{assinatura}_{st.session_state['alt_ver']}"
-
+    portarias_alteracoes = list(
+        st.session_state["alt_df"]["Portaria"].drop_duplicates()
+    )
+    portaria_selecionada = st.selectbox(
+        "Portaria para editar",
+        portarias_alteracoes,
+        key=f"filtro_alteracoes_{assinatura}",
+    )
+    df_completo = st.session_state["alt_df"]
+    indices = list(
+        df_completo.index[
+            df_completo["Portaria"] == portaria_selecionada
+        ]
+    )
+    df_portaria = df_completo.loc[indices]
+    registros_portaria = [
+        resultados[int(i)]
+        for i in df_portaria["_i"].drop_duplicates()
+    ]
 
     opcoes_novo = []
-    for reg in resultados:
+    for reg in registros_portaria:
         for campo, v in reg.items():
-            if campo == "arquivo" or v in (None, ""):
+            if campo == "arquivo" or valor_vazio(v):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
                 opcoes_novo.append(texto_exibicao(v).strip())
-    opcoes_novo += [v for v in df_alt["Novo"] if v]
+    opcoes_novo += [
+        v for v in df_portaria["Novo"] if not valor_vazio(v)
+    ]
     opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
 
+    chave_editor = (
+        f"alt_{assinatura}_{st.session_state['alt_ver']}_"
+        f"{hashlib.md5(portaria_selecionada.encode('utf-8')).hexdigest()[:8]}"
+    )
 
     ed2 = st.data_editor(
-        st.session_state["alt_df"],
+        df_portaria.reset_index(drop=True),
         hide_index=True,
         width="stretch",
         key=chave_editor,
         on_change=sincronizar_alteracoes,
-        args=(chave_editor, plan["tabela"]),
+        args=(chave_editor, plan["tabela"], indices),
         disabled=[
             "Portaria",
             "Linha",
@@ -376,6 +402,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             "_i": None,
             "_linha": None,
             "_coluna_orig": None,
+            "Tipo": None,
             "Novo": st.column_config.SelectboxColumn(
                 options=opcoes_novo, required=False, width=250
             ),
