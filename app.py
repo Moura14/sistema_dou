@@ -103,15 +103,35 @@ def sincronizar_alteracoes(chave_editor: str, tabela: dict) -> None:
         for coluna, valor in mudancas.items():
             df.at[int(pos), coluna] = valor
 
+        if "Novo" in mudancas or "Novo manual" in mudancas:
+            manual = df.at[int(pos), "Novo manual"]
+            novo = (
+                manual
+                if not valor_vazio(manual)
+                else df.at[int(pos), "Novo"]
+            )
+            df.at[int(pos), "Aplicar"] = not valor_vazio(novo)
+
     for pos in df.index:
         linha = int(df.at[pos, "_linha"])
+        manual = df.at[pos, "Novo manual"]
+        novo = manual if not valor_vazio(manual) else df.at[pos, "Novo"]
         if linha == 0:  # linha nova: não há valor atual
+            df.at[pos, "Tipo"] = (
+                "nova linha" if not valor_vazio(novo) else "sem informação"
+            )
             continue
         atual = texto_exibicao(
             tabela.get(linha, {}).get(df.at[pos, "Coluna"])
         )
+        novo = texto_exibicao(novo)
         df.at[pos, "Atual"] = atual
-        df.at[pos, "Tipo"] = "alterar" if atual else "preencher"
+        if not novo:
+            df.at[pos, "Tipo"] = "sem informação"
+        elif normalizar(atual) == normalizar(novo):
+            df.at[pos, "Tipo"] = "sem alteração"
+        else:
+            df.at[pos, "Tipo"] = "alterar" if atual else "preencher"
 
     st.session_state["alt_df"] = df
     st.session_state["alt_ver"] += 1
@@ -248,31 +268,46 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         if m["Ação"] == "Atualizar" and pd.notna(m["Linha na planilha"]):
             linha = int(m["Linha na planilha"])
             atuais = plan["tabela"].get(linha, {})
-            for a in calcular_alteracoes(
-                atuais, valores, excluir=colunas_chave
-            ):
+            alteracoes_calculadas = {
+                a["coluna"]: a
+                for a in calcular_alteracoes(atuais, valores)
+            }
+            for cab in colunas:
+                valor_novo = valores.get(cab, (None, None))[0]
+                alteracao = alteracoes_calculadas.get(cab)
+                tipo = (
+                    "chave"
+                    if cab in colunas_chave
+                    else alteracao["tipo"]
+                    if alteracao
+                    else "sem alteração"
+                )
                 alteracoes.append(
                     {
-                        "Aplicar": a["tipo"] == "preencher",
+                        "Aplicar": bool(
+                            alteracao
+                            and alteracao["tipo"] == "preencher"
+                            and cab not in colunas_chave
+                        ),
                         "_i": i,
                         "_linha": linha,
                         "Portaria": rotulo(reg, i),
                         "Linha": str(linha),
-                        "Coluna": a["coluna"],
-                        "_coluna_orig": a["coluna"],
-                        "Atual": texto_exibicao(a["atual"]),
-                        "Novo": texto_exibicao(a["novo"]),
-                        "Tipo": a["tipo"],
+                        "Coluna": cab,
+                        "_coluna_orig": cab,
+                        "Atual": texto_exibicao(atuais.get(cab)),
+                        "Novo": texto_exibicao(valor_novo),
+                        "Novo manual": "",
+                        "Tipo": tipo,
                     }
                 )
 
         elif m["Ação"] == "Adicionar nova":
-            for cab, (v, _) in valores.items():
-                if v in (None, ""):
-                    continue
+            for cab in colunas:
+                v = valores.get(cab, (None, None))[0]
                 alteracoes.append(
                     {
-                        "Aplicar": True,
+                        "Aplicar": not valor_vazio(v),
                         "_i": i,
                         "_linha": 0,
                         "Portaria": rotulo(reg, i),
@@ -281,7 +316,12 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "_coluna_orig": cab,
                         "Atual": "",
                         "Novo": texto_exibicao(v),
-                        "Tipo": "nova linha",
+                        "Novo manual": "",
+                        "Tipo": (
+                            "nova linha"
+                            if not valor_vazio(v)
+                            else "sem informação"
+                        ),
                     }
                 )
 
@@ -322,22 +362,37 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
         key=chave_editor,
         on_change=sincronizar_alteracoes,
         args=(chave_editor, plan["tabela"]),
-        disabled=["Portaria", "Linha", "Atual", "Tipo"],
+        disabled=[
+            "Portaria",
+            "Linha",
+            "Coluna",
+            "Atual",
+            "Tipo",
+            "_i",
+            "_linha",
+            "_coluna_orig",
+        ],
         column_config={
             "_i": None,
             "_linha": None,
             "_coluna_orig": None,
-            "Coluna": st.column_config.SelectboxColumn(
-                options=colunas, required=True
-            ),
             "Novo": st.column_config.SelectboxColumn(
-                options=opcoes_novo, required=True
+                options=opcoes_novo, required=False
+            ),
+            "Novo manual": st.column_config.TextColumn(
+                help=(
+                    "Digite aqui um valor personalizado. "
+                    "Se preenchido, ele substitui a opção do dropdown."
+                )
             ),
         },
     )
 
     selecionadas = int(ed2["Aplicar"].sum())
-    st.caption(f"{selecionadas} de {len(ed2)} alteração(ões) selecionada(s).")
+    st.caption(
+        f"{selecionadas} de {len(ed2)} alteração(ões) selecionada(s). "
+        "Se preencher “Novo manual”, esse valor será usado no lugar do dropdown."
+    )
 
     sel = ed2[ed2["Aplicar"]]
 
@@ -357,7 +412,20 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ):
         atualizacoes, novas = [], {}
         for _, a in ed2[ed2["Aplicar"]].iterrows():
-            valor = converter_valor(a["Novo"], plan["tipos"][a["Coluna"]])
+            if (
+                int(a["_linha"]) != 0
+                and a["Coluna"] in colunas_chave
+            ):
+                continue
+            valor_digitado = a["Novo manual"]
+            valor_escolhido = (
+                valor_digitado
+                if not valor_vazio(valor_digitado)
+                else a["Novo"]
+            )
+            valor = converter_valor(
+                valor_escolhido, plan["tipos"][a["Coluna"]]
+            )
             if valor is None:
                 continue
             if int(a["_linha"]) == 0:
