@@ -320,17 +320,24 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ]
 
     opcoes_novo = []
+    textos_originais = set()
     for reg in registros_portaria:
         for campo, v in reg.items():
             if campo == "arquivo" or valor_vazio(v):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
-                opcoes_novo.append(texto_exibicao(v).strip())
+                valor = texto_exibicao(v).strip()
+                opcoes_novo.append(valor)
+                if campo == "texto_original_ato":
+                    textos_originais.add(valor)
     opcoes_novo += [
         v for v in df_portaria["Novo"] if not valor_vazio(v)
     ]
     opcoes_novo = [""] + [
         o for o in dict.fromkeys(opcoes_novo) if o
+    ]
+    opcoes_novas_linha = [
+        opcao for opcao in opcoes_novo if opcao not in textos_originais
     ]
 
     chave_editor_base = (
@@ -410,7 +417,9 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                     "_coluna_orig": None,
                     "Tipo": None,
                     "Novo": st.column_config.SelectboxColumn(
-                        options=opcoes_novo, required=False, width=250
+                        options=opcoes_novas_linha,
+                        required=False,
+                        width=250,
                     ),
                     "Novo manual": st.column_config.TextColumn(
                         help=(
