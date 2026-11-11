@@ -199,6 +199,16 @@ def extrair_codigo(bloco):
 
 
 
+_RE_CPF = re.compile(
+    r"\bCPF(?:\s*/\s*M\.?\s*F\.?)?\b\s*"
+    r"(?:(?:sob\s+(?:o\s+)?)?n[ºo°.]?\s*)?[:\-]?\s*"
+    r"([*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{2})",
+    re.IGNORECASE
+)
+
 
 _RE_SIAPE = re.compile(
     r"\b(?:(?:Matrícula\s+)?SIAPE|Matrícula)\s*"
@@ -207,19 +217,10 @@ _RE_SIAPE = re.compile(
     re.IGNORECASE,
 )
 
-
-def extrair_siape(bloco):
-    m = _RE_SIAPE.search(bloco)
-    return limpar(m.group(1)) if m else None
-
-
-_RE_CPF = re.compile(
-    r"\bCPF(?:\s*/\s*M\.?\s*F\.?)?\b\s*"
-    r"(?:(?:sob\s+(?:o\s+)?)?n[ºo°.]?\s*)?[:\-]?\s*"
-    r"([*Xx\d]{3}[.\s-]?"
-    r"[*Xx\d]{3}[.\s-]?"
-    r"[*Xx\d]{3}[.\s-]?"
-    r"[*Xx\d]{2})",
+_RE_PROCESSO = re.compile(
+    r"\bprocesso\b\s*(?:administrativo\s*)?"
+    r"(?:n[º°o.]?\s*)?[:\-]?\s*"
+    r"(\d[\d./-]{4,})",
     re.IGNORECASE
 )
 
@@ -232,6 +233,20 @@ def extrair_cpf(bloco):
 
   
     return limpar(m.group(1))
+
+def extrair_siape(bloco):
+    m = _RE_SIAPE.search(bloco)
+    return limpar(m.group(1)) if m else None
+
+
+def extrair_processo(bloco):
+    m = _RE_PROCESSO.search(bloco)
+
+    if not m:
+        return None
+
+    return limpar(m.group(1))
+
 
 
 _DATA = (r"\d{1,2}\s*[º°o]?\s+de\s+[A-Za-zçÇ]+\s+de\s+\d{4}"
@@ -269,6 +284,7 @@ _REGRAS = (
     ("arquivo", set(), {"arquivo", "documento"}, set()),
     ("numero_portaria", {"portaria"}, set(), set()),
     ("siape", {"siape"}, set(), set()),
+    ("processo", {"processo"}, set(), set()),
 )
 
 
@@ -370,6 +386,7 @@ def _ministerio_do_orgao(orgao):
 
 def _registros_do_bloco(base, bloco, corpo):
     data_bloco = extrair_data_efeito(corpo)
+    processo = extrair_processo(bloco)
     saida = []
     for ato in dividir_atos(corpo):
         tipo, acao = identificar_acao(ato)
@@ -446,6 +463,7 @@ def extrair_informacoes(texto):
             "data_publicacao": publicacao,
             "orgao": orgao,
             "ministerio": ministerio,
+            "processo": extrair_processo(bloco),
         }
         registros += _registros_do_bloco(base, bloco, corpo)
 
