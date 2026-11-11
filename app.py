@@ -509,8 +509,184 @@ arquivo_excel = st.file_uploader(
     key="planilha",
 )
 
+
+def exibir_resumo_documentos(resultados):
+    st.divider()
+    st.subheader("Resumo dos documentos")
+
+    documentos = {}
+
+    for registro in resultados:
+        arquivo = registro.get("arquivo", "Documento sem nome")
+        documentos.setdefault(arquivo, []).append(registro)
+
+    total_registros = len(resultados)
+    total_documentos = len(documentos)
+
+    registros_incompletos = sum(
+        1 for r in resultados
+        if valor_vazio(r.get("nome"))
+    )
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Documentos processados", total_documentos)
+    c2.metric("Registros extraídos", total_registros)
+    c3.metric("Registros sem nome", registros_incompletos)
+
+    st.divider()
+
+
+    col1, col2 = st.columns([2, 1])
+    busca = col1.text_input(
+        "Pesquisar servidor",
+        placeholder="Digite o nome do servidor...",
+    )
+
+
+    tipos_disponiveis = sorted({
+        str(r.get("tipo_ato"))
+        for r in resultados
+        if not valor_vazio(r.get("tipo_ato"))
+    })
+
+    filtro_tipo = col2.selectbox(
+        "Tipo de ato",
+        ["Todos"] + tipos_disponiveis
+    )
+
+
+    resultados_filtrados = []
+
+    for registro in resultados:
+        nome = str(registro.get("nome") or "").lower()
+        tipo = str(registro.get("tipo_ato") or "")
+
+        if busca and busca.lower() not in nome:
+            continue
+
+        if filtro_tipo != "Todos" and tipo != filtro_tipo:
+            continue
+
+        resultados_filtrados.append(registro)
+
+    st.caption(
+        f"Exibindo {len(resultados_filtrados)} de "
+        f"{total_registros} registros."
+    )
+
+  
+    for arquivo, registros in documentos.items():
+
+        registros_doc = [
+            r for r in resultados_filtrados
+            if r.get("arquivo", "Documento sem nome") == arquivo
+        ]
+
+        if not registros_doc:
+            continue
+
+        with st.expander(
+            f"📄 {arquivo} · {len(registros_doc)} registro(s)",
+            expanded=True
+        ):
+            st.markdown("**Registros identificados**")
+
+            for indice, registro in enumerate(registros_doc, start=1):
+
+                nome = registro.get("nome") or "Nome não identificado"
+                tipo = registro.get("tipo_ato") or "Tipo não identificado"
+
+                with st.container(border=True):
+
+    
+                    col_nome, col_tipo = st.columns([3, 1])
+
+                    col_nome.markdown(f"**{nome}**")
+                    col_tipo.caption(tipo)
+
+                    st.divider()
+
+                    campos = [
+                        ("Novo cargo", "novo_cargo"),
+                        ("Cargo / função", "cargo"),
+                        ("Encargo", "encargo"),
+                        ("Código CCE/FCE", "codigos_cargo"),
+                        ("Data de efeito", "data_efeito"),
+                        ("Portaria referida", "portaria_referida"),
+                        ("CPF", "cpf")
+                    ]
+
+                    campos_exibidos = []
+
+                    for rotulo, chave in campos:
+                        valor = registro.get(chave)
+
+                        if not valor_vazio(valor):
+                            campos_exibidos.append(
+                                (rotulo, texto_exibicao(valor))
+                            )
+
+                    if not campos_exibidos:
+                        st.caption("Nenhum detalhe adicional identificado.")
+                    else:
+                        colunas = st.columns(2)
+
+                        for i, (rotulo, valor) in enumerate(campos_exibidos):
+                            with colunas[i % 2]:
+                                st.caption(rotulo)
+                                st.write(valor)
+
+                
+                    campos_principais = {
+                        "arquivo",
+                        "nome",
+                        "cpf",
+                        "tipo_ato",
+                        "novo_cargo",
+                        "cargo",
+                        "encargo",
+                        "codigos_cargo",
+                        "data_efeito",
+                        "portaria_referida",
+                        "data_publicacao",
+                    }
+
+                    outros = {
+                        chave: texto_exibicao(valor)
+                        for chave, valor in registro.items()
+                        if chave not in campos_principais
+                        and not valor_vazio(valor)
+                    }
+
+                    if outros:
+                        with st.expander("Ver outras informações"):
+                            for chave, valor in outros.items():
+                                st.markdown(
+                                    f"**{chave.replace('_', ' ').title()}:** "
+                                    f"{valor}"
+                                )
+
+            with st.expander("Visualizar registros em tabela"):
+                df_doc = pd.DataFrame(registros_doc).drop(
+                    columns=["arquivo", "data_publicacao"],
+                    errors="ignore"
+                )
+
+                df_doc = df_doc.rename(
+                    columns={"codigos_cargo": "Código CCE/FCE"}
+                )
+
+                st.dataframe(
+                    df_doc,
+                    width="stretch",
+                    hide_index=True
+                )
+
+
+resultados, textos = [], []
+
 if arquivos:
-    resultados, textos = [], []
 
     for arquivo in arquivos:
         st.divider()
@@ -526,9 +702,6 @@ if arquivos:
                 )
                 continue
 
-            with st.expander("Conferir texto original extraído"):
-                st.text(texto)
-
             if not registros:
                 st.warning("Nenhuma portaria foi identificada.")
                 continue
@@ -541,15 +714,9 @@ if arquivos:
         except Exception as erro:
             st.error(f"Erro ao processar {arquivo.name}: {erro}")
 
-    if resultados:
-        st.divider()
-        st.subheader("Resumo dos documentos")
+    
+if resultados:
+    exibir_resumo_documentos(resultados)
 
-        df = pd.DataFrame(resultados).drop(
-            columns=["data_publicacao"], errors="ignore"
-        )
-        st.dataframe(df, width="stretch")
-
-
-        if arquivo_excel is not None:
-            fluxo_planilha(resultados, textos, arquivo_excel)
+    if arquivo_excel is not None:
+        fluxo_planilha(resultados, textos, arquivo_excel)

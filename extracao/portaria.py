@@ -199,6 +199,26 @@ def extrair_codigo(bloco):
 
 
 
+_RE_CPF = re.compile(
+    r"\bCPF(?:\s*/\s*M\.?\s*F\.?)?\b\s*"
+    r"(?:(?:sob\s+(?:o\s+)?)?n[ºo°.]?\s*)?[:\-]?\s*"
+    r"([*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{3}[.\s-]?"
+    r"[*Xx\d]{2})",
+    re.IGNORECASE
+)
+
+
+def extrair_cpf(bloco):
+    m = _RE_CPF.search(bloco)
+
+    if not m:
+        return None
+
+  
+    return limpar(m.group(1))
+
 
 _DATA = (r"\d{1,2}\s*[º°o]?\s+de\s+[A-Za-zçÇ]+\s+de\s+\d{4}"
          r"|\d{1,2}[º°]?/\d{1,2}/\d{4}")
@@ -300,7 +320,7 @@ _RE_TITULO = re.compile(
     r"(?im)^\s*PORTARIAS?\b[^\n]*?\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
     r"\s*,?\s*DE\s+([^\n]+)"
 )
-_CAMPOS_UTEIS = ("tipo_ato", "nome", "cargo", "codigos_cargo", "data_efeito")
+_CAMPOS_UTEIS = ("tipo_ato", "nome", "cpf", "cargo", "codigos_cargo", "data_efeito")
 
 
 def _por_posicao(itens, pos, primeiro_se_nenhum=False):
@@ -346,6 +366,7 @@ def _registros_do_bloco(base, bloco, corpo):
             if passado:                                    
                 acao, trecho = passado, ato[passado.end():]
         cargo = extrair_cargo(trecho)
+        cpf = extrair_cpf(ato)
         encargo = None
         if cargo and re.match(r"substitut[oa]\s+eventual\b", cargo, re.I):
             encargo = "Substituto eventual"     
@@ -357,6 +378,7 @@ def _registros_do_bloco(base, bloco, corpo):
             **base,
             "tipo_ato": tipo,
             "nome": extrair_nome_depois_acao(ato, acao),
+            "cpf": cpf,
             "cargo": cargo,
             "encargo": encargo,
             "codigos_cargo": extrair_codigo(trecho),
