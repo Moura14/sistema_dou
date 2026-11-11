@@ -545,7 +545,9 @@ if arquivos:
         st.divider()
         st.subheader("Resumo dos documentos")
 
-        df = pd.DataFrame(resultados)
+        df = pd.DataFrame(resultados).drop(
+            columns=["data_publicacao"], errors="ignore"
+        )
         st.dataframe(df, width="stretch")
 
 
