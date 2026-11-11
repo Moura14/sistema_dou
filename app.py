@@ -23,7 +23,6 @@ from extracao.por_esquema import (
 )
 from planilhas.leitura import (
     listar_abas,
-    detectar_linha_cabecalho,
     ler_planilha,
 )
 
@@ -33,7 +32,6 @@ from planilhas.correspondencia import (
 )
 
 from planilhas.alteracoes import (
-    calcular_alteracoes,
     aplicar_alteracoes,
 )
 
@@ -146,21 +144,9 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
     conteudo = arquivo_excel.getvalue()
 
-    c1, c2 = st.columns([3, 1])
-    aba = c1.selectbox("Aba da planilha", listar_abas(conteudo))
-    detectada = carregar_planilha(conteudo, aba, None)["linha_cab"]
-    linha_cab = int(
-        c2.number_input(
-            "Linha do cabeçalho",
-            min_value=1,
-            value=detectada,
-            step=1,
-            key=f"linha_cab_{aba}",
-            help="Detectada automaticamente; corrija se estiver errada.",
-        )
-    )
-
-    plan = carregar_planilha(conteudo, aba, linha_cab)
+    aba = st.selectbox("Aba da planilha", listar_abas(conteudo))
+    plan = carregar_planilha(conteudo, aba, None)
+    linha_cab = plan["linha_cab"]
     colunas = list(plan["colunas"])
     if not colunas:
         st.error(
@@ -192,18 +178,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     padrao_chave = [
         c for c in cfg.get("colunas_chave", []) if c in colunas
     ] or sugerir_colunas_chave(colunas)
-
-    colunas_chave = st.multiselect(
-        "Como encontrar a linha existente? (coluna-chave)",
-        colunas,
-        default=padrao_chave,
-        key=f"chave_{chave_cfg}",
-        help="A portaria atualiza a linha em que estas colunas coincidem.",
-    )
-
-    if not colunas_chave:
-        st.info("Escolha ao menos uma coluna-chave para continuar.")
-        return
+    colunas_chave = padrao_chave
 
 
     valores_por_reg = []
@@ -266,32 +241,14 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     for _, m in ed1.iterrows():
         i = int(m["_i"])
         reg = resultados[i]
-        valores = valores_por_reg[i]
 
         if m["Ação"] == "Atualizar" and pd.notna(m["Linha na planilha"]):
             linha = int(m["Linha na planilha"])
             atuais = plan["tabela"].get(linha, {})
-            alteracoes_calculadas = {
-                a["coluna"]: a
-                for a in calcular_alteracoes(atuais, valores)
-            }
             for cab in colunas:
-                valor_novo = valores.get(cab, (None, None))[0]
-                alteracao = alteracoes_calculadas.get(cab)
-                tipo = (
-                    "chave"
-                    if cab in colunas_chave
-                    else alteracao["tipo"]
-                    if alteracao
-                    else "sem alteração"
-                )
                 alteracoes.append(
                     {
-                        "Aplicar": bool(
-                            alteracao
-                            and alteracao["tipo"] == "preencher"
-                            and cab not in colunas_chave
-                        ),
+                        "Aplicar": False,
                         "_i": i,
                         "_linha": linha,
                         "Portaria": rotulo(reg, i),
@@ -299,18 +256,20 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": texto_exibicao(atuais.get(cab)),
-                        "Novo": texto_exibicao(valor_novo),
+                        "Novo": "",
                         "Novo manual": "",
-                        "Tipo": tipo,
+                        "Tipo": (
+                            "chave"
+                            if cab in colunas_chave
+                            else "sem informação"
+                        ),
                     }
                 )
-
         elif m["Ação"] == "Adicionar nova":
             for cab in colunas:
-                v = valores.get(cab, (None, None))[0]
                 alteracoes.append(
                     {
-                        "Aplicar": not valor_vazio(v),
+                        "Aplicar": False,
                         "_i": i,
                         "_linha": 0,
                         "Portaria": rotulo(reg, i),
@@ -318,13 +277,9 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": texto_exibicao(v),
+                        "Novo": "",
                         "Novo manual": "",
-                        "Tipo": (
-                            "nova linha"
-                            if not valor_vazio(v)
-                            else "sem informação"
-                        ),
+                        "Tipo": "sem informação",
                     }
                 )
 
@@ -374,46 +329,100 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     opcoes_novo += [
         v for v in df_portaria["Novo"] if not valor_vazio(v)
     ]
-    opcoes_novo = [o for o in dict.fromkeys(opcoes_novo) if o]
+    opcoes_novo = [""] + [
+        o for o in dict.fromkeys(opcoes_novo) if o
+    ]
 
-    chave_editor = (
+    chave_editor_base = (
         f"alt_{assinatura}_{st.session_state['alt_ver']}_"
         f"{hashlib.md5(portaria_selecionada.encode('utf-8')).hexdigest()[:8]}"
     )
 
-    ed2 = st.data_editor(
-        df_portaria.reset_index(drop=True),
-        hide_index=True,
-        width="stretch",
-        key=chave_editor,
-        on_change=sincronizar_alteracoes,
-        args=(chave_editor, plan["tabela"], indices),
-        disabled=[
-            "Portaria",
-            "Linha",
-            "Coluna",
-            "Atual",
-            "Tipo",
-            "_i",
-            "_linha",
-            "_coluna_orig",
-        ],
-        column_config={
-            "_i": None,
-            "_linha": None,
-            "_coluna_orig": None,
-            "Tipo": None,
-            "Novo": st.column_config.SelectboxColumn(
-                options=opcoes_novo, required=False, width=250
+    editores = []
+    linhas_existentes = df_portaria[df_portaria["_linha"] != 0]
+    indices_existentes = list(linhas_existentes.index)
+    if not linhas_existentes.empty:
+        st.markdown("**Atualizar linha existente**")
+        chave_editor = f"{chave_editor_base}_atualizar"
+        editores.append(
+            st.data_editor(
+                linhas_existentes.reset_index(drop=True),
+                hide_index=True,
+                width="stretch",
+                key=chave_editor,
+                on_change=sincronizar_alteracoes,
+                args=(chave_editor, plan["tabela"], indices_existentes),
+                disabled=[
+                    "Portaria",
+                    "Linha",
+                    "Coluna",
+                    "Atual",
+                    "Tipo",
+                    "_i",
+                    "_linha",
+                    "_coluna_orig",
+                ],
+                column_config={
+                    "_i": None,
+                    "_linha": None,
+                    "_coluna_orig": None,
+                    "Tipo": None,
+                    "Novo": st.column_config.SelectboxColumn(
+                        options=opcoes_novo, required=False, width=250
+                    ),
+                    "Novo manual": st.column_config.TextColumn(
+                        help=(
+                            "Digite aqui um valor personalizado. "
+                            "Se preenchido, ele substitui a opção do dropdown."
+                        )
+                    ),
+                },
             ),
-            "Novo manual": st.column_config.TextColumn(
-                help=(
-                    "Digite aqui um valor personalizado. "
-                    "Se preenchido, ele substitui a opção do dropdown."
-                )
-            ),
-        },
+        )
+
+    linhas_novas = df_portaria[df_portaria["_linha"] == 0].drop(
+        columns=["Atual"]
     )
+    indices_novas = list(linhas_novas.index)
+    if not linhas_novas.empty:
+        st.markdown("**Adicionar nova linha**")
+        chave_editor = f"{chave_editor_base}_nova"
+        editores.append(
+            st.data_editor(
+                linhas_novas.reset_index(drop=True),
+                hide_index=True,
+                width="stretch",
+                key=chave_editor,
+                on_change=sincronizar_alteracoes,
+                args=(chave_editor, plan["tabela"], indices_novas),
+                disabled=[
+                    "Portaria",
+                    "Linha",
+                    "Coluna",
+                    "Tipo",
+                    "_i",
+                    "_linha",
+                    "_coluna_orig",
+                ],
+                column_config={
+                    "_i": None,
+                    "_linha": None,
+                    "_coluna_orig": None,
+                    "Tipo": None,
+                    "Novo": st.column_config.SelectboxColumn(
+                        options=opcoes_novo, required=False, width=250
+                    ),
+                    "Novo manual": st.column_config.TextColumn(
+                        help=(
+                            "Digite aqui um valor personalizado. "
+                            "Se preenchido, ele substitui a opção do dropdown."
+                        )
+                    ),
+                },
+            )
+        )
+
+    ed2 = pd.concat(editores, ignore_index=True)
 
     selecionadas = int(ed2["Aplicar"].sum())
     st.caption(
