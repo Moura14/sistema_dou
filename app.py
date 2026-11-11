@@ -642,6 +642,8 @@ def exibir_resumo_documentos(resultados):
                         "arquivo",
                         "nome",
                         "cpf",
+                        "orgao",
+                        "ministerio",
                         "tipo_ato",
                         "novo_cargo",
                         "cargo",
@@ -669,7 +671,12 @@ def exibir_resumo_documentos(resultados):
 
             with st.expander("Visualizar registros em tabela"):
                 df_doc = pd.DataFrame(registros_doc).drop(
-                    columns=["arquivo", "data_publicacao"],
+                    columns=[
+                        "arquivo",
+                        "data_publicacao",
+                        "orgao",
+                        "ministerio",
+                    ],
                     errors="ignore"
                 )
 
