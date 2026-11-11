@@ -614,7 +614,8 @@ def exibir_resumo_documentos(resultados):
                         ("Código CCE/FCE", "codigos_cargo"),
                         ("Data de efeito", "data_efeito"),
                         ("Portaria referida", "portaria_referida"),
-                        ("CPF", "cpf")
+                        ("CPF", "cpf"),
+                        ("Matrícula SIAPE", "siape"),
                     ]
 
                     campos_exibidos = []

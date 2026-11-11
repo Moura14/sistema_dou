@@ -199,6 +199,20 @@ def extrair_codigo(bloco):
 
 
 
+
+_RE_SIAPE = re.compile(
+    r"\b(?:(?:Matrícula\s+)?SIAPE|Matrícula)\s*"
+    r"(?:n[ºo°]\s*)?[:\-]?\s*"
+    r"([\d*Xx]+(?:[.\-][\d*Xx]+)*)\b",
+    re.IGNORECASE,
+)
+
+
+def extrair_siape(bloco):
+    m = _RE_SIAPE.search(bloco)
+    return limpar(m.group(1)) if m else None
+
+
 _RE_CPF = re.compile(
     r"\bCPF(?:\s*/\s*M\.?\s*F\.?)?\b\s*"
     r"(?:(?:sob\s+(?:o\s+)?)?n[ºo°.]?\s*)?[:\-]?\s*"
@@ -254,6 +268,7 @@ _REGRAS = (
     ("ministerio", {"ministerio"}, set(), set()),
     ("arquivo", set(), {"arquivo", "documento"}, set()),
     ("numero_portaria", {"portaria"}, set(), set()),
+    ("siape", {"siape"}, set(), set()),
 )
 
 
@@ -320,7 +335,7 @@ _RE_TITULO = re.compile(
     r"(?im)^\s*PORTARIAS?\b[^\n]*?\bN\s*[º°.]?\s*([\d]+(?:\.[\d]+)*)"
     r"\s*,?\s*DE\s+([^\n]+)"
 )
-_CAMPOS_UTEIS = ("tipo_ato", "nome", "cpf", "cargo", "codigos_cargo", "data_efeito")
+_CAMPOS_UTEIS = ("tipo_ato", "nome", "cpf", "siape", "cargo", "codigos_cargo", "data_efeito")
 
 
 def _por_posicao(itens, pos, primeiro_se_nenhum=False):
@@ -367,6 +382,7 @@ def _registros_do_bloco(base, bloco, corpo):
                 acao, trecho = passado, ato[passado.end():]
         cargo = extrair_cargo(trecho)
         cpf = extrair_cpf(ato)
+        siape = extrair_siape(ato)
         encargo = None
         if cargo and re.match(r"substitut[oa]\s+eventual\b", cargo, re.I):
             encargo = "Substituto eventual"     
@@ -379,6 +395,7 @@ def _registros_do_bloco(base, bloco, corpo):
             "tipo_ato": tipo,
             "nome": extrair_nome_depois_acao(ato, acao),
             "cpf": cpf,
+            "siape": siape,
             "cargo": cargo,
             "encargo": encargo,
             "codigos_cargo": extrair_codigo(trecho),
