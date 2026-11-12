@@ -279,8 +279,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
     if not alteracoes:
         st.info(
-            "Nada a alterar: as células já estão iguais, as portarias "
-            "foram ignoradas ou nenhum campo da planilha foi reconhecido."
+            "Selecione uma ação para cada portaria acima para ver as alterações que serão aplicadas na planilha."
         )
         return
 
