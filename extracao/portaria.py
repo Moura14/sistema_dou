@@ -460,7 +460,7 @@ def extrair_informacoes(texto):
             "sigla_portaria": limpar(oc.group("sigla")),
             "data_portaria": (_por_posicao(datas, inicio, primeiro_se_nenhum=True)
                               or _data_na_abertura(bloco)),
-            "data_publicacao": publicacao,
+            "data_publicacao": publicacao, 
             "orgao": orgao,
             "ministerio": ministerio,
             "processo": extrair_processo(bloco),

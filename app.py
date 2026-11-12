@@ -323,7 +323,12 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     textos_originais = set()
     for reg in registros_portaria:
         for campo, v in reg.items():
-            if campo == "arquivo" or valor_vazio(v):
+            if campo in {
+                "arquivo",
+                "numero_portaria",
+                "data_portaria",
+                "texto_original_ato",
+            } or valor_vazio(v):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
                 opcoes_novo.append(texto_exibicao(v).strip())
@@ -618,6 +623,7 @@ def exibir_resumo_documentos(resultados):
                     st.divider()
 
                     campos = [
+                        ("Processo administrativo", "processo"),
                         ("Novo cargo", "novo_cargo"),
                         ("Cargo / função", "cargo"),
                         ("Encargo", "encargo"),
@@ -663,6 +669,7 @@ def exibir_resumo_documentos(resultados):
                         "data_efeito",
                         "portaria_referida",
                         "data_publicacao",
+                        "processo",
                     }
 
                     outros = {
