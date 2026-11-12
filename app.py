@@ -668,6 +668,7 @@ def exibir_resumo_documentos(resultados):
                         "codigos_cargo",
                         "data_efeito",
                         "portaria_referida",
+                        "data_portaria",
                         "data_publicacao",
                         "processo",
                     }
