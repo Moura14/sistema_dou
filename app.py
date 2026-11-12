@@ -92,6 +92,10 @@ def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
 
 
+def limpar_aviso_gravacao() -> None:
+    st.session_state["aviso_gravacao_pendente"] = False
+
+
 def sincronizar_alteracoes(
     chave_editor: str, tabela: dict, indices: list[int]
 ) -> None:
@@ -486,20 +490,24 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             res["nome"] = arquivo_excel.name.rsplit(".", 1)[0]
             res["origem"] = arquivo_excel.name
             st.session_state["res_esquema"] = res
+            st.session_state["aviso_gravacao_pendente"] = True
             salvar_config(chave_cfg, {"colunas_chave": colunas_chave})
         except Exception as erro:
             st.session_state.pop("res_esquema", None)
+            st.session_state["aviso_gravacao_pendente"] = False
             st.error(f"Erro ao atualizar a planilha: {erro}")
 
     res = st.session_state.get("res_esquema")
     if res and res.get("origem") == arquivo_excel.name:
-        msg = f"{res['celulas']} célula(s) gravada(s)"
-        if res["linhas_novas"]:
-            msg += (
-                f"; {len(res['linhas_novas'])} linha(s) nova(s) "
-                f"({', '.join(map(str, res['linhas_novas']))})"
-            )
-        st.success(msg + ".")
+        if st.session_state.get("aviso_gravacao_pendente", False):
+            msg = f"{res['celulas']} célula(s) gravada(s)"
+            if res["linhas_novas"]:
+                msg += (
+                    f"; {len(res['linhas_novas'])} linha(s) nova(s) "
+                    f"({', '.join(map(str, res['linhas_novas']))})"
+                )
+            st.success(msg + ".")
+
         for falha in res["falhas"]:
             st.warning(f"Não gravado: {falha}")
 
@@ -508,6 +516,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             data=res["arquivo"],
             file_name=f"{res['nome']}_atualizada.xlsx",
             mime=XLSX_MIME,
+            on_click=limpar_aviso_gravacao,
         )
 
 arquivos = st.file_uploader(
