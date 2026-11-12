@@ -28,7 +28,6 @@ from planilhas.leitura import (
 
 from planilhas.correspondencia import (
     sugerir_colunas_chave,
-    localizar_linha,
 )
 
 from planilhas.alteracoes import (
@@ -196,19 +195,12 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
     linhas_match = []
     for i, reg in enumerate(resultados):
-        chave_vals = {
-            c: valores_por_reg[i].get(c, (None, None))[0]
-            for c in colunas_chave
-        }
-        linha, score, empates = localizar_linha(
-            plan["tabela"], colunas_chave, chave_vals
-        )
         linhas_match.append(
             {
                 "_i": i,
                 "Portaria": rotulo(reg, i),
-                "Linha na planilha": linha,
-                "Ação": "Atualizar" if linha else "Ignorar",
+                "Linha na planilha": None,
+                "Ação": None,
             }
         )
 
@@ -231,7 +223,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             ),
             "Ação": st.column_config.SelectboxColumn(
                 options=["Atualizar", "Adicionar nova", "Ignorar"],
-                required=True,
+                required=False,
             ),
         },
     )
@@ -320,6 +312,11 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ]
 
     opcoes_novo = []
+    valores_data_portaria = {
+        texto_exibicao(reg["data_portaria"]).strip()
+        for reg in registros_portaria
+        if not valor_vazio(reg.get("data_portaria"))
+    }
     textos_originais = set()
     for reg in registros_portaria:
         for campo, v in reg.items():
@@ -333,7 +330,9 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             if isinstance(v, (str, int, float, date, datetime)):
                 opcoes_novo.append(texto_exibicao(v).strip())
     opcoes_novo += [
-        v for v in df_portaria["Novo"] if not valor_vazio(v)
+        v for v in df_portaria["Novo"]
+        if not valor_vazio(v)
+        and texto_exibicao(v).strip() not in valores_data_portaria
     ]
     opcoes_novo = [""] + [
         o for o in dict.fromkeys(opcoes_novo) if o
