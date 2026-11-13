@@ -52,7 +52,7 @@ st.set_page_config(
 
 st.title("Extração de informações de portarias")
 st.write(
-    "Envie PDFs do Diário Oficial da União e a planilha a atualizar. "
+    "Envie PDFs do Diário Oficial da União e a planilha para atualizar. "
     "Os campos são definidos pelos cabeçalhos da própria planilha."
 )
 
