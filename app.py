@@ -16,6 +16,9 @@ from extracao.portaria import (
     extrair_informacoes,
     sugerir_campo_para_cabecalho,
 )
+
+from extracao.generica import extrair_generico
+
 from extracao.por_esquema import (
     extrair_com_ia,
     ia_disponivel,
@@ -62,7 +65,7 @@ XLSX_MIME = (
 def processar_pdf(conteudo: bytes):
     paginas = extrair_texto_pdf(conteudo)
     texto = "\n".join(p["texto"] for p in paginas)
-    registros = extrair_informacoes(texto) if texto.strip() else []
+    registros = extrair_generico(texto) if texto.strip() else []
     if isinstance(registros, dict):
         registros = [registros]
     return texto, registros or []
