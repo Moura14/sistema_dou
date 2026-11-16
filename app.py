@@ -272,8 +272,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": texto_exibicao(atuais.get(cab)),
-                       "Novo": texto_exibicao(
-                        valores_por_reg[i].get(cab)),                                
+                        "Novo": "",
                         "Novo manual": "",
                         "Tipo": (
                             "chave"
@@ -294,8 +293,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": texto_exibicao(
-                            valores_por_reg[i].get(cab)),        
+                        "Novo": "",
                         "Novo manual": "",
                         "Tipo": "sem informação",
                     }
