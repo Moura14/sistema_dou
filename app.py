@@ -64,8 +64,19 @@ XLSX_MIME = (
 @st.cache_data(show_spinner="Lendo PDF...")
 def processar_pdf(conteudo: bytes):
     paginas = extrair_texto_pdf(conteudo)
-    texto = "\n".join(p["texto"] for p in paginas)
-    registros = extrair_generico(texto) if texto.strip() else []
+
+    texto = "\n".join(
+        p.get("texto", "")
+        for p in paginas
+        if isinstance(p, dict)
+    )
+
+    if not texto.strip():
+        return texto, []
+    registros = extrair_informacoes(texto)
+    if not registros:
+        registros = extrair_generico(texto)
+
     if isinstance(registros, dict):
         registros = [registros]
     return texto, registros or []
@@ -188,17 +199,23 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
 
     valores_por_reg = []
+    pendentes_por_reg = []
     for i, reg in enumerate(resultados):
         valores, pendentes = resolver_por_regra(
-            reg, colunas, sugerir_campo_para_cabecalho
+            reg,
+            colunas,
+            sugerir_campo_para_cabecalho
         )
 
-        valores_por_reg.append(
-            {
-                cab: (converter_valor(v, plan["tipos"][cab]), origem)
-                for cab, (v, origem) in valores.items()
-            }
-        )
+        valores_convertidos = {
+            cab: converter_valor(valor, plan["tipos"][cab])
+            for cab, (valor, origem) in valores.items()
+            if cab in colunas and not valor_vazio(valor)
+        }
+
+        valores_por_reg.append(valores_convertidos)
+        pendentes_por_reg.append(pendentes)
+
 
     linhas_match = []
     for i, reg in enumerate(resultados):
@@ -255,7 +272,8 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": texto_exibicao(atuais.get(cab)),
-                        "Novo": "",
+                       "Novo": texto_exibicao(
+                        valores_por_reg[i].get(cab)),                                
                         "Novo manual": "",
                         "Tipo": (
                             "chave"
@@ -276,7 +294,8 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": "",
+                        "Novo": texto_exibicao(
+                            valores_por_reg[i].get(cab)),        
                         "Novo manual": "",
                         "Tipo": "sem informação",
                     }
@@ -627,15 +646,16 @@ def exibir_resumo_documentos(resultados):
     
                     col_nome, col_tipo = st.columns([3, 1])
 
+                    col_nome.caption("Servidor")
                     col_nome.markdown(f"**{nome}**")
                     col_tipo.caption(tipo)
 
                     st.divider()
 
                     campos = [
-                        ("Processo administrativo", "processo"),
+                        ("Processo", "processo"),
                         ("Novo cargo", "novo_cargo"),
-                        ("Cargo / função", "cargo"),
+                        ("Denominação / Cargo / Função", "cargo"),
                         ("Encargo", "encargo"),
                         ("Código CCE/FCE", "codigos_cargo"),
                         ("Data de efeito", "data_efeito"),
