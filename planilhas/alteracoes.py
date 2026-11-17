@@ -167,7 +167,7 @@ def aplicar_alteracoes(
             if altura is not None:
                 ws.row_dimensions[proxima].height = altura
 
-        for nome_col in esquema.get("colunas_ignoradas", ()):
+        for nome_col in esquema.get("colunas_a_limpar_novas", ()):
             try:
                 ws.cell(proxima, colunas[nome_col]).value = None
             except Exception as erro:

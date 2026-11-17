@@ -460,10 +460,9 @@ def fluxo_planilha(resultados, arquivo_excel):
                 )
         elif m["Ação"] == "Adicionar nova":
             for cab in colunas:
-                opcao = opcao_sugerida(reg, cab)
                 alteracoes.append(
                     {
-                        "Aplicar": bool(opcao),
+                        "Aplicar": False,
                         "_i": i,
                         "_linha": 0,
                         "Portaria": rotulo(reg),
@@ -471,7 +470,7 @@ def fluxo_planilha(resultados, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": opcao,
+                        "Novo": "",
                         "Novo manual": "",
                         "Tipo": "sem informação",
                     }
