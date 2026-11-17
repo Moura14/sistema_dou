@@ -286,12 +286,6 @@ def fluxo_planilha(resultados, arquivo_excel):
     colunas = [
         nome for nome in plan["colunas"] if nome not in colunas_ignoradas
     ]
-    if colunas_ignoradas:
-        st.info(
-            "A coluna duplicada de Processo será ignorada em novas linhas: "
-            + ", ".join(sorted(colunas_ignoradas))
-            + "."
-        )
     if not colunas:
         st.error(
             f"Não encontrei cabeçalhos na linha {linha_cab} da aba '{aba}'."
