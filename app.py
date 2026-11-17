@@ -324,42 +324,56 @@ def fluxo_planilha(resultados, arquivo_excel):
             {
                 "_i": i,
                 "Portaria": rotulo(reg),
-                "Linha na planilha": None,
                 "Ação": None,
+                "Linha na planilha": None,
             }
         )
 
-    df_match = pd.DataFrame(linhas_match)
-    df_match["Linha na planilha"] = df_match["Linha na planilha"].astype(
-        "Int64"
-    )
-
     st.markdown("**1. Qual linha cada portaria atualiza**")
-    ed1 = st.data_editor(
-        df_match,
-        hide_index=True,
-        width="stretch",
-        key=f"match_{chave_cfg}_{hash_df(df_match)}",
-        disabled=["Portaria", "Confiança"],
-        column_config={
-            "_i": None,
-            "Linha na planilha": st.column_config.NumberColumn(
-                min_value=linha_cab + 1, step=1, format="%d"
+    cab_portaria, cab_acao, cab_linha = st.columns([3, 1, 1])
+    cab_portaria.caption("Portaria")
+    cab_acao.caption("Ação")
+    cab_linha.caption("Linha na planilha")
+    assinatura_match = hash_df(pd.DataFrame(linhas_match))
+
+    for linha_match in linhas_match:
+        col_portaria, col_acao, col_linha = st.columns([3, 1, 1])
+        col_portaria.write(linha_match["Portaria"])
+        acao = col_acao.selectbox(
+            "Ação",
+            ["", "Atualizar", "Adicionar nova", "Ignorar"],
+            key=(
+                f"acao_{chave_cfg}_{assinatura_match}_"
+                f"{linha_match['_i']}"
             ),
-            "Ação": st.column_config.SelectboxColumn(
-                options=["Atualizar", "Adicionar nova", "Ignorar"],
-                required=False,
-            ),
-        },
-    )
+            label_visibility="collapsed",
+        )
+        linha_planilha = None
+        if acao == "Atualizar":
+            linha_planilha = col_linha.number_input(
+                "Linha na planilha",
+                min_value=linha_cab + 1,
+                step=1,
+                value=None,
+                key=(
+                    f"linha_{chave_cfg}_{assinatura_match}_"
+                    f"{linha_match['_i']}"
+                ),
+                label_visibility="collapsed",
+            )
+        linha_match["Ação"] = acao or None
+        linha_match["Linha na planilha"] = linha_planilha
+
+    ed1 = pd.DataFrame(linhas_match)
 
     alteracoes = []
     for _, m in ed1.iterrows():
         i = int(m["_i"])
         reg = resultados[i]
 
-        if m["Ação"] == "Atualizar" and pd.notna(m["Linha na planilha"]):
-            linha = int(m["Linha na planilha"])
+        linha_atualizar = m["Linha na planilha"]
+        if m["Ação"] == "Atualizar" and pd.notna(linha_atualizar):
+            linha = int(linha_atualizar)
             atuais = plan["tabela"].get(linha, {})
             for cab in colunas:
                 alteracoes.append(
@@ -399,12 +413,21 @@ def fluxo_planilha(resultados, arquivo_excel):
                     }
                 )
 
+    linhas_pendentes = ed1[
+        (ed1["Ação"] == "Atualizar")
+        & ed1["Linha na planilha"].isna()
+    ]
+    if not linhas_pendentes.empty:
+        st.info("Informe a linha da planilha para cada portaria a atualizar.")
+
     st.markdown("**2. O que vai mudar na planilha**")
 
     if not alteracoes:
-        st.info(
-            "Selecione uma ação para cada portaria acima para ver as alterações que serão aplicadas na planilha."
-        )
+        if linhas_pendentes.empty:
+            st.info(
+                "Selecione uma ação para cada portaria acima para ver "
+                "as alterações que serão aplicadas na planilha."
+            )
         return
 
     df_alt = pd.DataFrame(alteracoes)
