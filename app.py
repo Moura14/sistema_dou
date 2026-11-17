@@ -277,7 +277,21 @@ def fluxo_planilha(resultados, arquivo_excel):
     aba = st.selectbox("Aba da planilha", listar_abas(conteudo))
     plan = carregar_planilha(conteudo, aba, None)
     linha_cab = plan["linha_cab"]
-    colunas = list(plan["colunas"])
+    colunas_ignoradas = {
+        nome
+        for nome, original in plan.get("colunas_duplicadas", {}).items()
+        if normalizar(original) == normalizar("Processo")
+    }
+    plan["colunas_ignoradas"] = colunas_ignoradas
+    colunas = [
+        nome for nome in plan["colunas"] if nome not in colunas_ignoradas
+    ]
+    if colunas_ignoradas:
+        st.info(
+            "A coluna duplicada de Processo será ignorada em novas linhas: "
+            + ", ".join(sorted(colunas_ignoradas))
+            + "."
+        )
     if not colunas:
         st.error(
             f"Não encontrei cabeçalhos na linha {linha_cab} da aba '{aba}'."

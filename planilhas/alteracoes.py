@@ -159,6 +159,14 @@ def aplicar_alteracoes(
             if altura is not None:
                 ws.row_dimensions[proxima].height = altura
 
+        for nome_col in esquema.get("colunas_ignoradas", ()):
+            try:
+                ws.cell(proxima, colunas[nome_col]).value = None
+            except Exception as erro:
+                falhas.append(
+                    f"linha nova {proxima}, '{nome_col}': {erro}"
+                )
+
         # 4. Substituir somente os campos recebidos
         for nome_col, valor in dados.items():
 

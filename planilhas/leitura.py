@@ -32,6 +32,7 @@ def ler_planilha(arquivo: bytes, aba: str, linha_cab: int | None = None) -> dict
         linha_cab = detectar_linha_cabecalho(ws)
 
     colunas: dict[str, int] = {}
+    colunas_duplicadas: dict[str, str] = {}
     for c in range(1, ws.max_column + 1):
         v = ws.cell(linha_cab, c).value
         if v is None or not str(v).strip():
@@ -41,6 +42,8 @@ def ler_planilha(arquivo: bytes, aba: str, linha_cab: int | None = None) -> dict
         while nome in colunas: 
             nome = f"{base} ({n})"
             n += 1
+        if nome != base:
+            colunas_duplicadas[nome] = base
         colunas[nome] = c
 
     tabela: dict[int, dict] = {}
@@ -71,6 +74,7 @@ def ler_planilha(arquivo: bytes, aba: str, linha_cab: int | None = None) -> dict
     return {
         "linha_cab": linha_cab,
         "colunas": colunas,
+        "colunas_duplicadas": colunas_duplicadas,
         "tabela": tabela,
         "ultima_linha": ultima,
         "exemplos": exemplos,
