@@ -1,5 +1,4 @@
 import hashlib
-import json
 import re
 from datetime import date, datetime
 
@@ -13,18 +12,10 @@ from planilhas.esquema import (
     converter_valor,
     valor_vazio,
 )
-from extracao.portaria import (
-    extrair_informacoes,
-    sugerir_campo_para_cabecalho,
-)
+from extracao.portaria import extrair_informacoes
 
 from extracao.generica import extrair_generico
 
-from extracao.por_esquema import (
-    extrair_com_ia,
-    ia_disponivel,
-    resolver_por_regra,
-)
 from planilhas.leitura import (
     listar_abas,
     ler_planilha,
@@ -120,14 +111,9 @@ def separar_cargo_e_unidade(texto) -> tuple[str, str]:
     corte = CORTE_UNIDADE.search(resto)
     unidade = resto[: corte.start()] if corte else resto
 
-
     if not unidade.strip() or cargo.lower() == "ministro de estado":
         unidade = cargo
     return cargo, unidade.strip()
-
-
-def simplificar_cargo(texto) -> str:
-    return separar_cargo_e_unidade(texto)[0]
 
 
 @st.cache_data(show_spinner="Lendo PDF...")
@@ -165,14 +151,7 @@ def carregar_planilha(conteudo, aba, linha_cab):
     return ler_planilha(conteudo, aba, linha_cab)
 
 
-@st.cache_data(show_spinner="Consultando a IA nos campos sem correspondência...")
-def consultar_ia(texto: str, registro_json: str, pendentes_json: str):
-    return extrair_com_ia(
-        texto, json.loads(registro_json), json.loads(pendentes_json)
-    )
-
-
-def rotulo(reg: dict, i: int) -> str:
+def rotulo(reg: dict) -> str:
     return (
         f"{reg.get('nome') or '(nome não identificado)'} · "
         f"{reg.get('tipo_ato') or '?'} · "
@@ -182,6 +161,37 @@ def rotulo(reg: dict, i: int) -> str:
 
 def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
+
+
+ROTULOS_CAMPOS = {
+    "nome": "Nome",
+    "cpf": "CPF",
+    "siape": "Matrícula SIAPE",
+    "processo": "Processo",
+    "tipo_ato": "Tipo de ato",
+    "cargo": "Cargo",
+    "novo_cargo": "Novo cargo",
+    "unidade": "Unidade",
+    "encargo": "Encargo",
+    "codigos_cargo": "Código CCE/FCE",
+    "data_efeito": "Data de efeito",
+    "data_publicacao": "Data de publicação",
+    "portaria_referida": "Portaria referida",
+    "orgao": "Órgão",
+    "ministerio": "Ministério",
+}
+
+
+def rotulo_campo(chave: str) -> str:
+    return ROTULOS_CAMPOS.get(chave) or chave.replace("_", " ").capitalize()
+
+
+def valor_da_opcao(opcao):
+    mapa = st.session_state.get("mapa_opcoes", {})
+    try:
+        return mapa.get(opcao, opcao)
+    except TypeError: 
+        return opcao
 
 
 def limpar_aviso_gravacao() -> None:
@@ -204,15 +214,19 @@ def sincronizar_alteracoes(
             novo = (
                 manual
                 if not valor_vazio(manual)
-                else df.at[indice_df, "Novo"]
+                else valor_da_opcao(df.at[indice_df, "Novo"])
             )
             df.at[indice_df, "Aplicar"] = not valor_vazio(novo)
 
     for pos in df.index:
         linha = int(df.at[pos, "_linha"])
         manual = df.at[pos, "Novo manual"]
-        novo = manual if not valor_vazio(manual) else df.at[pos, "Novo"]
-        if linha == 0:  # linha nova: não há valor atual
+        novo = (
+            manual
+            if not valor_vazio(manual)
+            else valor_da_opcao(df.at[pos, "Novo"])
+        )
+        if linha == 0:
             df.at[pos, "Tipo"] = (
                 "nova linha" if not valor_vazio(novo) else "sem informação"
             )
@@ -233,7 +247,28 @@ def sincronizar_alteracoes(
     st.session_state["alt_ver"] += 1
 
 
-def fluxo_planilha(resultados, textos, arquivo_excel):
+def montar_alteracoes(ed2: pd.DataFrame, plan: dict, colunas_chave: list):
+    atualizacoes, novas = [], {}
+    for _, a in ed2[ed2["Aplicar"]].iterrows():
+        if int(a["_linha"]) != 0 and a["Coluna"] in colunas_chave:
+            continue
+        valor_digitado = a["Novo manual"]
+        valor_escolhido = (
+            valor_digitado
+            if not valor_vazio(valor_digitado)
+            else valor_da_opcao(a["Novo"])
+        )
+        valor = converter_valor(valor_escolhido, plan["tipos"][a["Coluna"]])
+        if valor is None:
+            continue
+        if int(a["_linha"]) == 0:
+            novas.setdefault(int(a["_i"]), {})[a["Coluna"]] = valor
+        else:
+            atualizacoes.append((int(a["_linha"]), a["Coluna"], valor))
+    return atualizacoes, novas
+
+
+def fluxo_planilha(resultados, arquivo_excel):
     st.divider()
     st.subheader("Atualizar a planilha")
 
@@ -275,30 +310,12 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ] or sugerir_colunas_chave(colunas)
     colunas_chave = padrao_chave
 
-    valores_por_reg = []
-    pendentes_por_reg = []
-    for i, reg in enumerate(resultados):
-        valores, pendentes = resolver_por_regra(
-            reg,
-            colunas,
-            sugerir_campo_para_cabecalho
-        )
-
-        valores_convertidos = {
-            cab: converter_valor(valor, plan["tipos"][cab])
-            for cab, (valor, origem) in valores.items()
-            if cab in colunas and not valor_vazio(valor)
-        }
-
-        valores_por_reg.append(valores_convertidos)
-        pendentes_por_reg.append(pendentes)
-
     linhas_match = []
     for i, reg in enumerate(resultados):
         linhas_match.append(
             {
                 "_i": i,
-                "Portaria": rotulo(reg, i),
+                "Portaria": rotulo(reg),
                 "Linha na planilha": None,
                 "Ação": None,
             }
@@ -342,7 +359,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Aplicar": False,
                         "_i": i,
                         "_linha": linha,
-                        "Portaria": rotulo(reg, i),
+                        "Portaria": rotulo(reg),
                         "Linha": str(linha),
                         "Coluna": cab,
                         "_coluna_orig": cab,
@@ -363,7 +380,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                         "Aplicar": False,
                         "_i": i,
                         "_linha": 0,
-                        "Portaria": rotulo(reg, i),
+                        "Portaria": rotulo(reg),
                         "Linha": "nova",
                         "Coluna": cab,
                         "_coluna_orig": cab,
@@ -410,12 +427,12 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ]
 
     opcoes_novo = []
+    mapa_opcoes = st.session_state.setdefault("mapa_opcoes", {})
     valores_data_portaria = {
         texto_exibicao(reg["data_portaria"]).strip()
         for reg in registros_portaria
         if not valor_vazio(reg.get("data_portaria"))
     }
-    textos_originais = set()
     for reg in registros_portaria:
         for campo, v in reg.items():
             if campo in {
@@ -426,11 +443,18 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             } or valor_vazio(v):
                 continue
             if isinstance(v, (str, int, float, date, datetime)):
-                opcoes_novo.append(texto_exibicao(v).strip())
+                valor = texto_exibicao(v).strip()
+                if not valor:
+                    continue
+                # Ex.: "Nome: Fulano de Tal", "CPF: ***.123.456-**"
+                opcao = f"{rotulo_campo(campo)}: {valor}"
+                mapa_opcoes[opcao] = valor
+                opcoes_novo.append(opcao)
     opcoes_novo += [
         v for v in df_portaria["Novo"]
         if not valor_vazio(v)
-        and texto_exibicao(v).strip() not in valores_data_portaria
+        and texto_exibicao(valor_da_opcao(v)).strip()
+        not in valores_data_portaria
     ]
     opcoes_novo = [""] + [
         o for o in dict.fromkeys(opcoes_novo) if o
@@ -471,7 +495,14 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                     "_coluna_orig": None,
                     "Tipo": None,
                     "Novo": st.column_config.SelectboxColumn(
-                        options=opcoes_novo, required=False, width=250
+                        options=opcoes_novo,
+                        required=False,
+                        width=380,
+                        help=(
+                            "Escolha a informação extraída da portaria. "
+                            "Cada opção mostra o campo de origem antes "
+                            "do valor."
+                        ),
                     ),
                     "Novo manual": st.column_config.TextColumn(
                         help=(
@@ -513,7 +544,14 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
                     "_coluna_orig": None,
                     "Tipo": None,
                     "Novo": st.column_config.SelectboxColumn(
-                        options=opcoes_novo, required=False, width=250
+                        options=opcoes_novo,
+                        required=False,
+                        width=380,
+                        help=(
+                            "Escolha a informação extraída da portaria. "
+                            "Cada opção mostra o campo de origem antes "
+                            "do valor."
+                        ),
                     ),
                     "Novo manual": st.column_config.TextColumn(
                         help=(
@@ -544,36 +582,13 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             + ". A última da lista prevalece."
         )
 
+    atualizacoes, novas = montar_alteracoes(ed2, plan, colunas_chave)
+
     if st.button(
         "Aplicar à planilha",
         type="primary",
         disabled=selecionadas == 0,
     ):
-        atualizacoes, novas = [], {}
-        for _, a in ed2[ed2["Aplicar"]].iterrows():
-            if (
-                int(a["_linha"]) != 0
-                and a["Coluna"] in colunas_chave
-            ):
-                continue
-            valor_digitado = a["Novo manual"]
-            valor_escolhido = (
-                valor_digitado
-                if not valor_vazio(valor_digitado)
-                else a["Novo"]
-            )
-            valor = converter_valor(
-                valor_escolhido, plan["tipos"][a["Coluna"]]
-            )
-            if valor is None:
-                continue
-            if int(a["_linha"]) == 0:
-                novas.setdefault(int(a["_i"]), {})[a["Coluna"]] = valor
-            else:
-                atualizacoes.append(
-                    (int(a["_linha"]), a["Coluna"], valor)
-                )
-
         try:
             res = aplicar_alteracoes(
                 conteudo,
@@ -706,7 +721,7 @@ def exibir_resumo_documentos(resultados):
         ):
             st.markdown("**Registros identificados**")
 
-            for indice, registro in enumerate(registros_doc, start=1):
+            for registro in registros_doc:
 
                 nome = registro.get("nome") or "Nome não identificado"
                 tipo = registro.get("tipo_ato") or "Tipo não identificado"
@@ -788,7 +803,7 @@ def exibir_resumo_documentos(resultados):
                                 )
 
 
-resultados, textos = [], []
+resultados = []
 
 if arquivos:
 
@@ -813,7 +828,6 @@ if arquivos:
             for registro in registros:
                 registro["arquivo"] = arquivo.name
                 resultados.append(registro)
-                textos.append(texto)
 
         except Exception as erro:
             st.error(f"Erro ao processar {arquivo.name}: {erro}")
@@ -822,4 +836,4 @@ if resultados:
     exibir_resumo_documentos(resultados)
 
     if arquivo_excel is not None:
-        fluxo_planilha(resultados, textos, arquivo_excel)
+        fluxo_planilha(resultados, arquivo_excel)
