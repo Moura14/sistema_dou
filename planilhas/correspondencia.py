@@ -1,7 +1,5 @@
-"""Localização de registros existentes na planilha."""
 
 from difflib import SequenceMatcher
-
 from planilhas.esquema import normalizar
 
 

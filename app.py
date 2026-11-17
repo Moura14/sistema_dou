@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from datetime import date, datetime
 
 import pandas as pd
@@ -60,6 +61,74 @@ XLSX_MIME = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
+COMPOSTOS = (
+    "ministro de estado",
+    "secretário adjunto",
+    "secretária adjunta",
+    "secretário executivo",
+    "secretária executiva",
+    "chefe de gabinete",
+    "chefe de assessoria",
+    "chefe de divisão",
+    "chefe de serviço",
+    "assessor especial",
+    "assessora especial",
+)
+
+PREPOSICOES = {"de", "do", "da", "dos", "das"}
+
+
+CAMPOS_CARGO = ("cargo",)
+
+
+def formatar_cargo(palavras: list[str]) -> str:
+    return " ".join(
+        p if i > 0 and p in PREPOSICOES else p.capitalize()
+        for i, p in enumerate(palavras)
+    )
+
+
+
+CORTE_UNIDADE = re.compile(
+    r"\s+d[aoe]s?\s+"
+    r"(?:Secretaria|Subsecretaria|Minist[ée]rio|Casa\s+Civil|"
+    r"Presid[êe]ncia|Controladoria|Advocacia)\b",
+    re.IGNORECASE,
+)
+
+
+def separar_cargo_e_unidade(texto) -> tuple[str, str]:
+    palavras = str(texto or "").split()
+    if not palavras:
+        return "", ""
+
+    minusculas = [p.lower() for p in palavras]
+    qtd = 1
+    for c in COMPOSTOS:
+        partes = c.split()
+        if minusculas[: len(partes)] == partes:
+            qtd = len(partes)
+            break
+
+    cargo = formatar_cargo(minusculas[:qtd])
+
+    resto = palavras[qtd:]
+    while resto and resto[0].lower() in PREPOSICOES:
+        resto = resto[1:]
+    resto = " ".join(resto)
+
+    corte = CORTE_UNIDADE.search(resto)
+    unidade = resto[: corte.start()] if corte else resto
+
+
+    if not unidade.strip() or cargo.lower() == "ministro de estado":
+        unidade = cargo
+    return cargo, unidade.strip()
+
+
+def simplificar_cargo(texto) -> str:
+    return separar_cargo_e_unidade(texto)[0]
+
 
 @st.cache_data(show_spinner="Lendo PDF...")
 def processar_pdf(conteudo: bytes):
@@ -79,6 +148,15 @@ def processar_pdf(conteudo: bytes):
 
     if isinstance(registros, dict):
         registros = [registros]
+
+    for reg in registros or []:
+        for campo in CAMPOS_CARGO:
+            if not valor_vazio(reg.get(campo)):
+                cargo, unidade = separar_cargo_e_unidade(reg[campo])
+                reg[campo] = cargo
+                if campo == "cargo" and valor_vazio(reg.get("unidade")):
+                    reg["unidade"] = unidade
+
     return texto, registros or []
 
 
@@ -197,7 +275,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
     ] or sugerir_colunas_chave(colunas)
     colunas_chave = padrao_chave
 
-
     valores_por_reg = []
     pendentes_por_reg = []
     for i, reg in enumerate(resultados):
@@ -215,7 +292,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
 
         valores_por_reg.append(valores_convertidos)
         pendentes_por_reg.append(pendentes)
-
 
     linhas_match = []
     for i, reg in enumerate(resultados):
@@ -251,7 +327,6 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             ),
         },
     )
-
 
     alteracoes = []
     for _, m in ed1.iterrows():
@@ -539,6 +614,7 @@ def fluxo_planilha(resultados, textos, arquivo_excel):
             on_click=limpar_aviso_gravacao,
         )
 
+
 arquivos = st.file_uploader(
     "Selecione uma ou mais portarias em PDF",
     type=["pdf"],
@@ -578,13 +654,11 @@ def exibir_resumo_documentos(resultados):
 
     st.divider()
 
-
     col1, col2 = st.columns([2, 1])
     busca = col1.text_input(
         "Pesquisar servidor",
         placeholder="Digite o nome do servidor...",
     )
-
 
     tipos_disponiveis = sorted({
         str(r.get("tipo_ato"))
@@ -596,7 +670,6 @@ def exibir_resumo_documentos(resultados):
         "Tipo de ato",
         ["Todos"] + tipos_disponiveis
     )
-
 
     resultados_filtrados = []
 
@@ -617,7 +690,6 @@ def exibir_resumo_documentos(resultados):
         f"{total_registros} registros."
     )
 
-  
     for arquivo, registros in documentos.items():
 
         registros_doc = [
@@ -641,7 +713,6 @@ def exibir_resumo_documentos(resultados):
 
                 with st.container(border=True):
 
-    
                     col_nome, col_tipo = st.columns([3, 1])
 
                     col_nome.caption("Servidor")
@@ -664,12 +735,12 @@ def exibir_resumo_documentos(resultados):
 
                     campos_exibidos = []
 
-                    for rotulo, chave in campos:
+                    for rotulo_campo, chave in campos:
                         valor = registro.get(chave)
 
                         if not valor_vazio(valor):
                             campos_exibidos.append(
-                                (rotulo, texto_exibicao(valor))
+                                (rotulo_campo, texto_exibicao(valor))
                             )
 
                     if not campos_exibidos:
@@ -677,12 +748,11 @@ def exibir_resumo_documentos(resultados):
                     else:
                         colunas = st.columns(2)
 
-                        for i, (rotulo, valor) in enumerate(campos_exibidos):
+                        for i, (rotulo_campo, valor) in enumerate(campos_exibidos):
                             with colunas[i % 2]:
-                                st.caption(rotulo)
+                                st.caption(rotulo_campo)
                                 st.write(valor)
 
-                
                     campos_principais = {
                         "arquivo",
                         "nome",
@@ -692,6 +762,7 @@ def exibir_resumo_documentos(resultados):
                         "tipo_ato",
                         "novo_cargo",
                         "cargo",
+                        "unidade",
                         "encargo",
                         "codigos_cargo",
                         "data_efeito",
@@ -715,27 +786,6 @@ def exibir_resumo_documentos(resultados):
                                     f"**{chave.replace('_', ' ').title()}:** "
                                     f"{valor}"
                                 )
-
-            # with st.expander("Visualizar registros em tabela"):
-            #     df_doc = pd.DataFrame(registros_doc).drop(
-            #         columns=[
-            #             "arquivo",
-            #             "data_publicacao",
-            #             "orgao",
-            #             "ministerio",
-            #         ],
-            #         errors="ignore"
-            #     )
-
-            #     df_doc = df_doc.rename(
-            #         columns={"codigos_cargo": "Código CCE/FCE"}
-            #     )
-
-            #     st.dataframe(
-            #         df_doc,
-            #         width="stretch",
-            #         hide_index=True
-            #     )
 
 
 resultados, textos = [], []
@@ -768,7 +818,6 @@ if arquivos:
         except Exception as erro:
             st.error(f"Erro ao processar {arquivo.name}: {erro}")
 
-    
 if resultados:
     exibir_resumo_documentos(resultados)
 
