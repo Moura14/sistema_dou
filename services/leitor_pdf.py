@@ -8,7 +8,7 @@ def _texto_da_pagina(pagina, fator=FATOR_ESPACO):
     dados = pagina.get_text("rawdict")
     linhas = []
     for bloco in dados["blocks"]:
-        if bloco.get("type") != 0:  # só blocos de texto
+        if bloco.get("type") != 0: 
             continue
         for linha in bloco["lines"]:
             partes, ultimo_x1 = [], None

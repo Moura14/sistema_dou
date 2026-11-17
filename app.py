@@ -52,6 +52,15 @@ XLSX_MIME = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
+COLUNAS_EDITAVEIS = (
+    "Servidor",
+    "Nomeação",
+    "Processo",
+    "Substituto",
+    "Processo do Substituto",
+    "Código CCE/FCE",
+)
+
 COMPOSTOS = (
     "ministro de estado",
     "secretário adjunto",
@@ -168,9 +177,12 @@ ROTULOS_CAMPOS = {
     "cpf": "CPF",
     "siape": "Matrícula SIAPE",
     "processo": "Processo",
+    "processo_substituto": "Processo do Substituto",
     "tipo_ato": "Tipo de ato",
+    "data_portaria": "Data da portaria",
     "cargo": "Cargo",
     "novo_cargo": "Novo cargo",
+    "substituto": "Substituto",
     "unidade": "Unidade",
     "encargo": "Encargo",
     "codigos_cargo": "Código CCE/FCE",
@@ -184,6 +196,31 @@ ROTULOS_CAMPOS = {
 
 def rotulo_campo(chave: str) -> str:
     return ROTULOS_CAMPOS.get(chave) or chave.replace("_", " ").capitalize()
+
+
+CAMPO_POR_COLUNA = {
+    "servidor": "nome",
+    "nomeacao": "data_portaria",
+    "processo": "processo",
+    "substituto": "substituto",
+    "processo do substituto": "processo_substituto",
+    "codigo cce/fce": "codigos_cargo",
+}
+
+
+def opcao_sugerida(registro: dict, coluna: str) -> str:
+    campo = CAMPO_POR_COLUNA.get(normalizar(coluna))
+    valor = registro.get(campo) if campo else None
+    if valor_vazio(valor):
+        return ""
+
+    valor_texto = texto_exibicao(valor).strip()
+    if not valor_texto:
+        return ""
+
+    opcao = f"{rotulo_campo(campo)}: {valor_texto}"
+    st.session_state.setdefault("mapa_opcoes", {})[opcao] = valor
+    return opcao
 
 
 def valor_da_opcao(opcao):
@@ -247,11 +284,9 @@ def sincronizar_alteracoes(
     st.session_state["alt_ver"] += 1
 
 
-def montar_alteracoes(ed2: pd.DataFrame, plan: dict, colunas_chave: list):
+def montar_alteracoes(ed2: pd.DataFrame, plan: dict):
     atualizacoes, novas = [], {}
     for _, a in ed2[ed2["Aplicar"]].iterrows():
-        if int(a["_linha"]) != 0 and a["Coluna"] in colunas_chave:
-            continue
         valor_digitado = a["Novo manual"]
         valor_escolhido = (
             valor_digitado
@@ -283,35 +318,62 @@ def fluxo_planilha(resultados, arquivo_excel):
         if normalizar(original) == normalizar("Processo")
     }
     plan["colunas_ignoradas"] = colunas_ignoradas
-    colunas = [
+    coluna_codigo = next(
+        (
+            nome
+            for nome in plan["colunas"]
+            if normalizar(nome) == normalizar("Código CCE/FCE")
+        ),
+        None,
+    )
+    plan["colunas_novas"] = []
+    if coluna_codigo is None:
+        coluna_codigo = "Código CCE/FCE"
+        plan["colunas"][coluna_codigo] = (
+            max(plan["colunas"].values(), default=0) + 1
+        )
+        plan["tipos"][coluna_codigo] = "texto"
+        plan["exemplos"][coluna_codigo] = []
+        plan["colunas_novas"].append(coluna_codigo)
+
+    colunas_disponiveis = [
         nome for nome in plan["colunas"] if nome not in colunas_ignoradas
     ]
+    colunas_permitidas = {normalizar(nome) for nome in COLUNAS_EDITAVEIS}
+    colunas = [
+        nome
+        for nome in colunas_disponiveis
+        if normalizar(nome) in colunas_permitidas
+    ]
+    plan["colunas_a_limpar_novas"] = set(colunas) | colunas_ignoradas
     if not colunas:
         st.error(
-            f"Não encontrei cabeçalhos na linha {linha_cab} da aba '{aba}'."
+            "A planilha não contém nenhuma das colunas editáveis esperadas: "
+            + ", ".join(COLUNAS_EDITAVEIS)
+            + "."
         )
         return
 
     chave_cfg = chave_planilha(colunas)
     cfg = carregar_config(chave_cfg)
 
-    with st.expander("Campos encontrados na planilha"):
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Campo": n,
-                        "Tipo": plan["tipos"][n],
-                        "Exemplos": " | ".join(
-                            texto_exibicao(v) for v in plan["exemplos"][n]
-                        ),
-                    }
-                    for n in colunas
-                ]
-            ),
-            width="stretch",
-            hide_index=True,
-        )
+    # with st.expander("Campos encontrados na planilha"):
+    #     st.dataframe(
+    #         pd.DataFrame(
+    #             [
+    #                 {
+    #                     "Campo": n,
+    #                     "Tipo": plan["tipos"][n],
+    #                     "Exemplos": " | ".join(
+    #                         texto_exibicao(v) for v in plan["exemplos"][n]
+    #                     ),
+    #                 }
+    #                 for n in colunas
+    #             ]
+    #         ),
+    #         width="stretch",
+    #         hide_index=True,
+    #     )
 
     padrao_chave = [
         c for c in cfg.get("colunas_chave", []) if c in colunas
@@ -376,9 +438,10 @@ def fluxo_planilha(resultados, arquivo_excel):
             linha = int(linha_atualizar)
             atuais = plan["tabela"].get(linha, {})
             for cab in colunas:
+                opcao = opcao_sugerida(reg, cab)
                 alteracoes.append(
                     {
-                        "Aplicar": False,
+                        "Aplicar": bool(opcao),
                         "_i": i,
                         "_linha": linha,
                         "Portaria": rotulo(reg),
@@ -386,7 +449,7 @@ def fluxo_planilha(resultados, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": texto_exibicao(atuais.get(cab)),
-                        "Novo": "",
+                        "Novo": opcao,
                         "Novo manual": "",
                         "Tipo": (
                             "chave"
@@ -397,9 +460,10 @@ def fluxo_planilha(resultados, arquivo_excel):
                 )
         elif m["Ação"] == "Adicionar nova":
             for cab in colunas:
+                opcao = opcao_sugerida(reg, cab)
                 alteracoes.append(
                     {
-                        "Aplicar": False,
+                        "Aplicar": bool(opcao),
                         "_i": i,
                         "_linha": 0,
                         "Portaria": rotulo(reg),
@@ -407,7 +471,7 @@ def fluxo_planilha(resultados, arquivo_excel):
                         "Coluna": cab,
                         "_coluna_orig": cab,
                         "Atual": "",
-                        "Novo": "",
+                        "Novo": opcao,
                         "Novo manual": "",
                         "Tipo": "sem informação",
                     }
@@ -420,6 +484,7 @@ def fluxo_planilha(resultados, arquivo_excel):
     if not linhas_pendentes.empty:
         st.info("Informe a linha da planilha para cada portaria a atualizar.")
 
+    st.divider()
     st.markdown("**2. O que vai mudar na planilha**")
 
     if not alteracoes:
@@ -480,6 +545,10 @@ def fluxo_planilha(resultados, arquivo_excel):
                 # Ex.: "Nome: Fulano de Tal", "CPF: ***.123.456-**"
                 opcao = f"{rotulo_campo(campo)}: {valor}"
                 mapa_opcoes[opcao] = valor
+                opcoes_novo.append(opcao)
+        for coluna in colunas:
+            opcao = opcao_sugerida(reg, coluna)
+            if opcao:
                 opcoes_novo.append(opcao)
     opcoes_novo += [
         v for v in df_portaria["Novo"]
@@ -613,7 +682,7 @@ def fluxo_planilha(resultados, arquivo_excel):
             + ". A última da lista prevalece."
         )
 
-    atualizacoes, novas = montar_alteracoes(ed2, plan, colunas_chave)
+    atualizacoes, novas = montar_alteracoes(ed2, plan)
 
     if st.button(
         "Aplicar à planilha",
@@ -839,9 +908,6 @@ resultados = []
 if arquivos:
 
     for arquivo in arquivos:
-        st.divider()
-        st.subheader(arquivo.name)
-
         try:
             texto, registros = processar_pdf(arquivo.getvalue())
 

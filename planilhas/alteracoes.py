@@ -80,7 +80,16 @@ def aplicar_alteracoes(
     falhas: list[str] = []
     celulas = 0
 
-    # 1. Atualizar registros existentes
+    for nome_col in esquema.get("colunas_novas", ()):
+        indice = ws.max_column + 1
+        colunas[nome_col] = indice
+        cabecalho = ws.cell(esquema["linha_cab"], indice)
+        cabecalho.value = nome_col
+        if indice > 1:
+            anterior = ws.cell(esquema["linha_cab"], indice - 1)
+            if anterior.has_style:
+                cabecalho._style = copy(anterior._style)
+
     for linha, nome_col, valor in atualizacoes:
 
         if valor_vazio(valor):
@@ -98,31 +107,30 @@ def aplicar_alteracoes(
                 f"linha {linha}, '{nome_col}': {erro}"
             )
 
-    # 2. Identificar a última linha preenchida
+    
     modelo = esquema["ultima_linha"]
     linha_cab = esquema["linha_cab"]
 
     tem_modelo = modelo > linha_cab
 
-    # Guardar a quantidade de colunas antes das inclusões
+    
     total_colunas = ws.max_column
 
     proxima = modelo + 1
     linhas_novas = []
 
-    # 3. Criar novos registros
+  
     for dados in novas:
 
         if tem_modelo:
 
-            # Copiar TODOS os valores e formatações
-            # da última linha preenchida.
+        
             for c in range(1, total_colunas + 1):
 
                 origem = ws.cell(modelo, c)
                 destino = ws.cell(proxima, c)
 
-                # Copiar valor ou fórmula
+             
                 valor_origem = origem.value
 
                 if isinstance(valor_origem, str) and valor_origem.startswith("="):
@@ -136,11 +144,11 @@ def aplicar_alteracoes(
 
                 destino.value = valor_origem
 
-                # Copiar formatação
+          
                 if origem.has_style:
                     destino._style = copy(origem._style)
 
-                # Copiar outras propriedades
+            
                 if origem.number_format:
                     destino.number_format = origem.number_format
 
@@ -153,7 +161,7 @@ def aplicar_alteracoes(
                 if origem.hyperlink:
                     destino._hyperlink = copy(origem.hyperlink)
 
-            # Copiar altura da linha
+            
             altura = ws.row_dimensions[modelo].height
 
             if altura is not None:
@@ -167,10 +175,10 @@ def aplicar_alteracoes(
                     f"linha nova {proxima}, '{nome_col}': {erro}"
                 )
 
-        # 4. Substituir somente os campos recebidos
+       
         for nome_col, valor in dados.items():
 
-            # Não substituir valores herdados por campos vazios
+            
             if valor_vazio(valor):
                 continue
 
@@ -190,7 +198,7 @@ def aplicar_alteracoes(
         linhas_novas.append(proxima)
         proxima += 1
 
-    # 5. Salvar arquivo
+    
     saida = BytesIO()
 
     wb.save(saida)
