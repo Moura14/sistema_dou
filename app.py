@@ -402,7 +402,7 @@ def fluxo_planilha(resultados, arquivo_excel):
         col_portaria.write(linha_match["Portaria"])
         acao = col_acao.selectbox(
             "Ação",
-            ["Atualizar", "Adicionar nova", "Ignorar"],
+            ["Atualizar", "Adicionar nova"],
             index=None,
             placeholder="",
             key=(
