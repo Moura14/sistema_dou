@@ -394,7 +394,6 @@ def fluxo_planilha(resultados, arquivo_excel):
     st.markdown("**1. Qual linha cada portaria atualiza**")
     cab_portaria, cab_acao, cab_linha = st.columns([3, 1, 1])
     cab_portaria.caption("Portaria")
-    cab_acao.caption("Ação")
     cab_linha.caption("Linha na planilha")
     assinatura_match = hash_df(pd.DataFrame(linhas_match))
 
@@ -405,7 +404,7 @@ def fluxo_planilha(resultados, arquivo_excel):
             "Ação",
             ["Atualizar", "Adicionar nova", "Ignorar"],
             index=None,
-            placeholder="Selecione uma ação",
+            placeholder="",
             key=(
                 f"acao_{chave_cfg}_{assinatura_match}_"
                 f"{linha_match['_i']}"
