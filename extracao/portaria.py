@@ -87,8 +87,16 @@ def _juntar_verbo(m):
     return m.group(1) + re.sub(r"\s+", "", m.group(2))
 
 
+_RE_SUMARIO = re.compile(
+    r"(?mi)^[ \t]*SUM[ÁA]RIO[ \t]*$"
+    r"|^[^\n]*(?:\.[ \t]*){4,}\d{1,4}[ \t]*$"
+    r"|^[ \t]*P[áa]g(?:ina|\.)?[ \t]*\d+[ \t]*$"
+)
+
+
 def normalizar_texto(texto):
     texto = _RE_LIXO.sub("", texto)
+    texto = _RE_SUMARIO.sub("", texto)
     texto = _RE_VERBO_ESPACADO.sub(_juntar_verbo, texto)
     texto = texto.replace("\xa0", " ").replace("\u00ad", "")
     texto = re.sub(r"(\w)-\n(?=[a-zà-ú])", r"\1", texto)
@@ -215,6 +223,14 @@ def _nome_fallback(resto):
     return None
 
 
+_RE_NOME_SERVIDOR = re.compile(
+    r"\b(?i:servidora?|empregad[oa])\s+(" + _MAIUSC_NOME + r")(?=\s*,)"
+)
+_RE_NOME_ANTES_MATRICULA = re.compile(
+    r"(" + _MAIUSC_NOME + r")\s*,\s*[^,;]{3,100}?\s*,\s*(?i:matr[ií]cula)\b"
+)
+
+
 def extrair_nome_depois_acao(texto, resultado_acao):
     if not resultado_acao:
         return None
@@ -222,6 +238,13 @@ def extrair_nome_depois_acao(texto, resultado_acao):
     m = _RE_NOME.search(resto[:250])
     if m:
         return _nome_valido(_aparar_nome(limpar(m.group(1))))
+
+    # nome distante do verbo: "a servidora NOME," ou "NOME, Cargo, matrícula"
+    for padrao in (_RE_NOME_SERVIDOR, _RE_NOME_ANTES_MATRICULA):
+        m = padrao.search(resto[:1500])
+        if m and _nome_valido(limpar(m.group(1))):
+            return _nome_valido(limpar(m.group(1)))
+
     for padrao in (_RE_NOME_PASSIVO, _RE_NOME_SOLTO):
         m = padrao.search(resto[:400])
         if m and _nome_valido(limpar(m.group(1))):
@@ -342,6 +365,19 @@ def extrair_destino(bloco):
     m = _RE_DESTINO.search(bloco)
     return limpar(m.group(1)) if m else None
 
+
+
+_RE_ITEM_SUBST = re.compile(
+    r"(?:^|\s)([IVX]+)\s*[-–—]\s*(" + _MAIUSC_NOME + r")\s*,\s*"
+    r"(?i:matr[ií]cula\s+siape)\s*(?:n[ºo°.]*\s*)?([\d.]+)"
+)
+
+
+def extrair_ordem_substituicao(ato):
+    return [
+        (i + 1, limpar(m.group(2)), m.group(3).rstrip("."))
+        for i, m in enumerate(_RE_ITEM_SUBST.finditer(ato))
+    ]
 
 
 _REGRAS = (
@@ -527,9 +563,29 @@ def _registros_do_bloco(base, bloco, corpo):
             "portaria_referida": ref,
             "texto_original_ato": limpar(ato),
         }
+        m_cs = _RE_CARGO_APOS_NOME.search(ato)
+        if m_cs:
+            registro["cargo_servidor"] = limpar(m_cs.group(1))
+
+        extras = []
+        if encargo:
+            for n, nome_sub, siape_sub in extrair_ordem_substituicao(ato):
+                if _sem_acento(nome_sub) == _sem_acento(registro["nome"] or ""):
+                    registro["ordem_substituicao"] = n
+                else:
+                    extras.append({
+                        **registro,
+                        "nome": nome_sub,
+                        "siape": siape_sub,
+                        "cpf": None,
+                        "cargo_servidor": None,
+                        "ordem_substituicao": n,
+                    })
+
         if tipo == "Transferência":
             registro["destino"] = extrair_destino(ato)
         saida.append(registro)
+        saida.extend(extras)
     return [
         r for r in saida
         if r.get("tipo_ato") or r.get("texto_original_ato")
@@ -563,6 +619,26 @@ def extrair_despachos(texto, base):
             "processo": extrair_processo(texto[a.end():a.end() + 120]),
             "texto_original_ato": limpar(a[0]),
         })
+    return saida
+
+
+def _limpar_registros(registros):
+    vistos, saida = set(), []
+    for r in registros:
+        if not r.get("nome") and not r.get("tipo_ato"):
+            continue  # resíduo de sumário/cabeçalho
+        chave = (
+            r.get("numero_portaria"),
+            _sem_acento(r.get("nome") or "") or r.get("texto_original_ato"),
+            r.get("siape"),
+            r.get("tipo_ato"),
+            r.get("ordem_substituicao"),
+            r.get("data_efeito"),
+        )
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        saida.append(r)
     return saida
 
 
@@ -640,7 +716,7 @@ def extrair_informacoes(texto):
             }
             registros = _registros_do_bloco(base, texto, texto[t.end():])
 
-    if not registros and RE_INFINITIVO.search(texto):
+    if not registros and RE_ACAO.search(texto):
         base = {
             "numero_portaria": None,
             "sigla_portaria": None,
@@ -650,7 +726,7 @@ def extrair_informacoes(texto):
             "ministerio": _ministerio_do_orgao(orgao_global),
         }
         registros = _registros_do_bloco(base, texto, texto)
-    return registros
+    return _limpar_registros(registros)
 
 
 def ler_pdf(caminho):
