@@ -54,11 +54,14 @@ XLSX_MIME = (
 
 COLUNAS_EDITAVEIS = (
     "Servidor",
+    "SIAPE",
+    "Matrícula SIAPE",
     "Nomeação",
     "Processo",
     "Substituto",
     "Processo do Substituto",
     "Código CCE/FCE",
+    "FCE/CCE",
 )
 
 COMPOSTOS = (
@@ -200,11 +203,14 @@ def rotulo_campo(chave: str) -> str:
 
 CAMPO_POR_COLUNA = {
     "servidor": "nome",
-    "nomeacao": "data_portaria",
+    "matricula siape": "siape",
+    "siape": "siape",
+    "matricula": "siape",
     "processo": "processo",
     "substituto": "substituto",
     "processo do substituto": "processo_substituto",
     "codigo cce/fce": "codigos_cargo",
+    "fce/cce": "codigos_cargo",
 }
 
 
@@ -322,7 +328,10 @@ def fluxo_planilha(resultados, arquivo_excel):
         (
             nome
             for nome in plan["colunas"]
-            if normalizar(nome) == normalizar("Código CCE/FCE")
+            if normalizar(nome) in {
+                normalizar("Código CCE/FCE"),
+                normalizar("FCE/CCE"),
+            }
         ),
         None,
     )
