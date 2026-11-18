@@ -403,7 +403,9 @@ def fluxo_planilha(resultados, arquivo_excel):
         col_portaria.write(linha_match["Portaria"])
         acao = col_acao.selectbox(
             "Ação",
-            ["", "Atualizar", "Adicionar nova", "Ignorar"],
+            ["Atualizar", "Adicionar nova", "Ignorar"],
+            index=None,
+            placeholder="Selecione uma ação",
             key=(
                 f"acao_{chave_cfg}_{assinatura_match}_"
                 f"{linha_match['_i']}"
