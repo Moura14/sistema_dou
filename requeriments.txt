@@ -1,5 +1,5 @@
 streamlit
 pandas
-PyMuPDF
+pymupdf
 openpyxl
 anthropic
