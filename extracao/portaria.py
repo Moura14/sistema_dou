@@ -518,6 +518,37 @@ def _emissor(bloco):
     return _titulo(limpar(m.group(1))) if m else None
 
 
+def pertence_ao_ministerio_esporte(base, bloco):
+    sigla = _sem_acento(base.get("sigla_portaria") or "").upper()
+    ministerio = _sem_acento(base.get("ministerio") or "").upper()
+    orgao = _sem_acento(base.get("orgao") or "").upper()
+    texto = _sem_acento(bloco).upper()
+
+    if sigla == "MESP":
+        return True
+
+    if "MINISTERIO DO ESPORTE" in ministerio:
+        return True
+
+    if "MINISTERIO DO ESPORTE" in orgao:
+        return True
+
+    if "MINISTRO DE ESTADO DO ESPORTE" in texto:
+        return True
+
+    if "SECRETARIO-EXECUTIVO DO MINISTERIO DO ESPORTE" in texto:
+        return True
+
+    if (
+        "CASA CIVIL" in texto
+        and "MINISTERIO DO ESPORTE" in texto
+    ):
+        return True
+
+    return False
+
+
+
 def _ministerio_do_orgao(orgao):
     return limpar(orgao.split("/")[0]) if orgao else None
 
@@ -692,6 +723,10 @@ def extrair_informacoes(texto):
             "ministerio": ministerio,
             "processo": extrair_processo(bloco),
         }
+
+        if not pertence_ao_ministerio_esporte(base, bloco):
+            continue
+
         registros += _registros_do_bloco(base, bloco, corpo)
 
     registros += extrair_despachos(texto, {
@@ -725,7 +760,7 @@ def extrair_informacoes(texto):
             "orgao": orgao_global,
             "ministerio": _ministerio_do_orgao(orgao_global),
         }
-        registros = _registros_do_bloco(base, texto, texto)
+        registros = _registros_do_bloco(base, texto, texto)    
     return _limpar_registros(registros)
 
 
