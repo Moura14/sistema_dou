@@ -544,6 +544,8 @@ def fluxo_planilha(resultados, arquivo_excel):
                 "arquivo",
                 "numero_portaria",
                 "data_portaria",
+                "data_publicacao",
+                "tipo_ato",
                 "texto_original_ato",
             } or valor_vazio(v):
                 continue
