@@ -4,6 +4,10 @@ from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
+import os
+import shutil
+from pathlib import Path
+
 
 from services.leitor_pdf import extrair_texto_pdf
 from planilhas.esquema import (
@@ -82,6 +86,23 @@ PREPOSICOES = {"de", "do", "da", "dos", "das"}
 
 
 CAMPOS_CARGO = ("cargo",)
+
+PASTA_COMPARTILHADA = Path(__file__).resolve().parent / "dados_compartilhados"
+ARQ_ATUAL = PASTA_COMPARTILHADA / "planilha_atual.xlsx"
+
+
+def publicar_planilha(conteudo: bytes) -> None:
+    PASTA_COMPARTILHADA.mkdir(exist_ok=True)
+
+    if ARQ_ATUAL.exists():
+        hist = PASTA_COMPARTILHADA / "historico"
+        hist.mkdir(exist_ok=True)
+        carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
+        shutil.copy2(ARQ_ATUAL, hist / f"planilha_{carimbo}.xlsx")
+
+    tmp = ARQ_ATUAL.with_suffix(".tmp")
+    tmp.write_bytes(conteudo)
+    os.replace(tmp, ARQ_ATUAL)
 
 
 def formatar_cargo(palavras: list[str]) -> str:
@@ -709,6 +730,7 @@ def fluxo_planilha(resultados, arquivo_excel):
                 atualizacoes,
                 [novas[k] for k in sorted(novas)],
             )
+            publicar_planilha(res["arquivo"])
             res["nome"] = arquivo_excel.name.rsplit(".", 1)[0]
             res["origem"] = arquivo_excel.name
             st.session_state["res_esquema"] = res
@@ -729,6 +751,7 @@ def fluxo_planilha(resultados, arquivo_excel):
                     f"({', '.join(map(str, res['linhas_novas']))})"
                 )
             st.success(msg + ".")
+            st.page_link("pages/1_Dashboard.py", label="Ver no dashboard", icon="📊")
 
         for falha in res["falhas"]:
             st.warning(f"Não gravado: {falha}")
