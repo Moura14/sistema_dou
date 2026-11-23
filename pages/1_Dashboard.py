@@ -5,6 +5,7 @@ import plotly.express as px
 import streamlit as st
 import re
 from datetime import datetime
+import hashlib
 
 from planilhas.leitura import listar_abas, ler_planilha
 
@@ -313,35 +314,5 @@ def painel():
                     )
                 else:
                     st.info("Sem dados de status.")
-
-    st.markdown("---")
-
-    
-    a1, a2 = st.columns([2, 1])
-    
-    with a1:
-        with st.container(border=True):
-            st.markdown("**Comparar duas colunas**")
-            if len(categoricas) > 1:
-                x1, x2 = st.columns(2)
-                eixo = x1.selectbox("Eixo X", categoricas, key="eixo_grade")
-                cor = x2.selectbox("Dividir por", [c for c in categoricas if c != eixo], key="cor_grade")
-                
-                base = df.dropna(subset=[eixo, cor]).astype({eixo: str, cor: str})
-                top_cor = base[cor].value_counts().head(5).index
-                base[cor] = base[cor].where(base[cor].isin(top_cor), "Outros")
-                base[eixo] = base[eixo].map(encurtar)
-                g = base.groupby([eixo, cor]).size().reset_index(name="Quantidade")
-                
-                fig = px.bar(g, x=eixo, y="Quantidade", color=cor, barmode="stack")
-                fig.update_layout(
-                    margin=dict(l=0, r=0, t=10, b=0), 
-                    xaxis_title=None, 
-                    legend=dict(orientation="h", y=-0.3),
-                    height=350
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("São necessárias pelo menos duas colunas categóricas para comparar.")
 
 painel()
