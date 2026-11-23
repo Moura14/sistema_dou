@@ -344,25 +344,4 @@ def painel():
             else:
                 st.info("São necessárias pelo menos duas colunas categóricas para comparar.")
 
-    with a2:
-        with st.container(border=True):
-            st.markdown("**Ações Rápidas**")
-            st.write("Faça o download dos dados filtrados para análise externa.")
-            st.download_button(
-                "⬇️ Baixar dados (CSV)",
-                df.to_csv(index=False).encode("utf-8"),
-                "dados_filtrados.csv",
-                "text/csv",
-                use_container_width=True,
-                type="primary"
-            )
-            st.write("")
-            st.write("")
-            st.write("💡 *Dica: Use os filtros na barra lateral para refinar os dados antes de baixar.*")
-
-    st.markdown("### Dados Detalhados")
-    with st.container(border=True):
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-
 painel()
