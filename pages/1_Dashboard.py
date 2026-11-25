@@ -231,7 +231,7 @@ def mostrar_grafico(df, col, tipo, topn, key, height=300):
 
 def limpar_filtros():
     for k in list(st.session_state.keys()):
-        if k.startswith(("f_", "g_")) or k == "busca":
+        if k.startswith(("f_", "g_")):
             del st.session_state[k]
 
 
@@ -369,8 +369,6 @@ def painel():
                      "no topo da página. Os gráficos e números não mudam.",
             )
             st.divider()
-        st.text_input("Buscar em qualquer coluna", key="busca", placeholder="Ex.: nome, cargo…")
-
         def filtro(c):
             nonlocal df
             # opções vêm da base completa, para a seleção nunca ficar inválida
@@ -388,13 +386,6 @@ def painel():
                 with st.expander(f"Mais filtros ({len(categoricas_filtro) - 4})"):
                     for c in categoricas_filtro[4:]:
                         filtro(c)
-
-    busca = st.session_state.get("busca", "")
-    if busca:
-        mask = df.astype(str).apply(
-            lambda col: col.str.contains(busca, case=False, na=False, regex=False)
-        ).any(axis=1)
-        df = df[mask]
 
     with st.sidebar:
         st.divider()
@@ -432,7 +423,7 @@ def painel():
         )
 
     st.write("")
-    tab1, tab2, tab3 = st.tabs(["📈 Visão geral", "🗓️ Linha do tempo", "📋 Dados"])
+    tab1, tab2 = st.tabs(["📈 Visão geral", "🗓️ Linha do tempo"])
 
     with tab1:
         if not cols_graf:
@@ -474,7 +465,10 @@ def painel():
                     opcoes_tipo.append("Ocupação (empilhado)")
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
                 topn = e3.slider("Top N", 3, 20, 10, key="g_exp_topn")
-                st.divider()
+                st.markdown(
+                    '<div style="height: 2rem;"></div>',
+                    unsafe_allow_html=True,
+                )
                 if tipo == "Ocupação (empilhado)":
                     st.plotly_chart(grafico_empilhado(df, col, topn), use_container_width=True,
                                     key="g_exp_emp")
@@ -526,24 +520,5 @@ def painel():
                                       xaxis_title=None, yaxis_title=None,
                                       xaxis=dict(rangeslider=dict(visible=True)))
                     st.plotly_chart(fig, use_container_width=True, key="g_timeline")
-
-    with tab3:
-        escolhidas = st.multiselect(
-            "Colunas exibidas", list(df.columns), default=list(df.columns),
-            key=f"g_cols_{aba}",
-        )
-        vis = df[escolhidas] if escolhidas else df
-        config = {
-            c: st.column_config.DateColumn(c, format="DD/MM/YYYY")
-            for c in vis.columns if pd.api.types.is_datetime64_any_dtype(vis[c])
-        }
-        st.dataframe(vis, use_container_width=True, height=480, column_config=config)
-        st.download_button(
-            "⬇️ Baixar dados filtrados (CSV)",
-            vis.to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"dados_filtrados_{aba}.csv",
-            mime="text/csv",
-        )
-
 
 painel()
