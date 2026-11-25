@@ -5,6 +5,7 @@ import re
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from planilhas.leitura import listar_abas, ler_planilha
@@ -19,10 +20,10 @@ ARQ = (
 )
 
 MAX_CATEGORIAS = 25
-COR = "#4F8BF9"
-PALETA = ["#4F8BF9", "#7C5CFC", "#2FBF9B", "#F5A524", "#F0527A",
-          "#38BDF8", "#A3E635", "#FB923C", "#94A3B8"]
-COR_SITUACAO = {"Ocupado": "#2FBF9B", "Vago": "#F0527A"}
+COR = "#737373"
+COR_OUTROS = "#969696"
+PALETA = ["#4B4B4B", "#626262", "#787878", "#8E8E8E", "#A3A3A3",
+          "#B8B8B8", "#CDCDCD", "#5A5A5A", "#777777"]
 INTERVALO_ATUALIZACAO = 30  # segundos
 
 SEM_INTERESSE_CONTEM = ("siorg", "uorg", "sigla", "logradouro",
@@ -156,54 +157,88 @@ def contagem_com_outros(serie: pd.Series, col: str, topn: int) -> pd.DataFrame:
     return out
 
 
-def grafico_categoria(df, col, tipo, topn, height=300):
-    cont = contagem_com_outros(df[col], col, topn)
-
-    if tipo == "Pizza":
-        fig = px.pie(cont, names="Rótulo", values="Quantidade", hole=0.58,
-                     hover_data={col: True}, color_discrete_sequence=PALETA)
-        fig.update_traces(textinfo="percent", textposition="inside",
-                          hovertemplate="%{label}: <b>%{value}</b> (%{percent})<extra></extra>")
-        fig.add_annotation(text=f"<b>{int(cont['Quantidade'].sum())}</b>",
-                           x=0.5, y=0.5, showarrow=False, font=dict(size=24))
-        fig.update_layout(legend=dict(orientation="h", y=-0.05, font=dict(size=11)))
-    elif tipo == "Treemap":
-        fig = px.treemap(cont, path=["Rótulo"], values="Quantidade",
-                         hover_data={col: True})
-        fig.update_traces(textinfo="label+value")
-        fig.update_layout(treemapcolorway=PALETA)
-    else:
-        fig = px.bar(cont, x="Quantidade", y="Rótulo", orientation="h",
-                     text="Quantidade", hover_data={col: True, "Rótulo": False})
-        fig.update_traces(marker_color=COR, textposition="outside",
-                          cliponaxis=False,
-                          hovertemplate="%{customdata[0]}: <b>%{x}</b><extra></extra>")
-        fig.update_layout(
-            yaxis={"categoryorder": "total ascending", "title": None},
-            xaxis={"title": None, "showgrid": False},
-        )
-
-    fig.update_layout(height=height, margin=dict(l=0, r=10, t=10, b=0))
-    return fig
+def _cores_com_outros(rotulos: pd.Series) -> list:
+    cores = [PALETA[i % len(PALETA)] for i in range(len(rotulos))]
+    return [COR_OUTROS if r == "Outros" else cores[i]
+            for i, r in enumerate(rotulos)]
 
 
-def grafico_empilhado(df, col, topn, height=380):
-    top = df[col].dropna().astype(str).value_counts().head(topn).index
-    base = df[df[col].astype(str).isin(top)].copy()
-    base[col] = base[col].astype(str)
-    base["Rótulo"] = base[col].map(encurtar)
-    cont = base.groupby(["Rótulo", "Situação"]).size().reset_index(name="Quantidade")
-    fig = px.bar(cont, x="Quantidade", y="Rótulo", color="Situação",
-                 orientation="h", color_discrete_map=COR_SITUACAO, barmode="stack",
-                 text="Quantidade")
-    fig.update_traces(hovertemplate="%{y} · %{fullData.name}: <b>%{x}</b><extra></extra>")
+def grafico_barras(cont, col, height=300):
+    cores = _cores_com_outros(cont["Rótulo"])
+    fig = px.bar(cont, x="Quantidade", y="Rótulo", orientation="h",
+                 text="Quantidade", hover_data={col: True, "Rótulo": False})
+    fig.update_traces(marker_color=cores, textposition="outside",
+                      cliponaxis=False,
+                      hovertemplate="%{customdata[0]}: <b>%{x}</b><extra></extra>")
     fig.update_layout(
         height=height, margin=dict(l=0, r=10, t=10, b=0),
         yaxis={"categoryorder": "total ascending", "title": None},
         xaxis={"title": None, "showgrid": False},
-        legend=dict(orientation="h", y=1.08, title=None),
     )
     return fig
+
+
+def grafico_pizza(cont, col, height=300):
+    cores = _cores_com_outros(cont["Rótulo"])
+    fig = px.pie(cont, names="Rótulo", values="Quantidade", hole=0.58,
+                 hover_data={col: True}, color_discrete_sequence=cores)
+    fig.update_traces(textinfo="percent", textposition="inside",
+                      hovertemplate="%{label}: <b>%{value}</b> (%{percent})<extra></extra>")
+    fig.add_annotation(text=f"<b>{int(cont['Quantidade'].sum())}</b>",
+                       x=0.5, y=0.5, showarrow=False, font=dict(size=24))
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=10, t=10, b=0),
+        legend=dict(orientation="h", y=-0.05, font=dict(size=11)),
+    )
+    return fig
+
+
+def grafico_treemap(cont, col, height=300):
+    fig = px.treemap(cont, path=["Rótulo"], values="Quantidade",
+                     hover_data={col: True})
+    fig.update_traces(textinfo="label+value")
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=10, t=10, b=0),
+        treemapcolorway=PALETA,
+    )
+    return fig
+
+
+def grafico_lollipop(cont, col, height=300):
+    cont = cont.sort_values("Quantidade")
+    cores = _cores_com_outros(cont["Rótulo"])
+    fig = go.Figure(go.Scatter(
+        x=cont["Quantidade"],
+        y=cont["Rótulo"],
+        mode="markers+lines",
+        line=dict(color=COR, width=2),
+        marker=dict(size=10, color=cores),
+        text=cont["Quantidade"],
+        textposition="middle right",
+        hovertemplate="%{customdata}: <b>%{x}</b><extra></extra>",
+        customdata=cont[col],
+    ))
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=10, t=10, b=0),
+        yaxis={"categoryorder": "total ascending", "title": None},
+        xaxis={"title": None, "showgrid": False},
+    )
+    return fig
+
+
+def grafico_categoria(df, col, tipo, topn, height=300):
+    cont = contagem_com_outros(df[col], col, topn)
+
+    if tipo == "Pizza (auto)" or tipo == "Automático":
+        tipo = "Pizza"
+
+    if tipo == "Pizza":
+        return grafico_pizza(cont, col, height)
+    if tipo == "Treemap":
+        return grafico_treemap(cont, col, height)
+    if tipo == "Lollipop":
+        return grafico_lollipop(cont, col, height)
+    return grafico_barras(cont, col, height)
 
 
 def _clique(col: str, key: str):
@@ -221,9 +256,9 @@ def _clique(col: str, key: str):
     st.session_state[f"f_{col}"] = sorted(set(valores))
 
 
-def mostrar_grafico(df, col, tipo, topn, key, height=300):
+def mostrar_grafico(df, col, tipo, topn, key, height=300, permitir_clique=True):
     fig = grafico_categoria(df, col, tipo, topn, height=height)
-    if tipo == "Barras":
+    if permitir_clique and tipo in ("Barras", "Lollipop", "Pizza (auto)", "Automático"):
         st.plotly_chart(
             fig, use_container_width=True, key=key,
             on_select=partial(_clique, col, key), selection_mode="points",
@@ -467,36 +502,36 @@ def painel():
             with g2, st.container(border=True):
                 if col_secundaria:
                     st.markdown(f"**Distribuição: {col_secundaria}**")
-                    mostrar_grafico(df, col_secundaria, "Pizza", 8, "g_secundaria")
+                    mostrar_grafico(df, col_secundaria, "Barras", 8, "g_secundaria")
                 else:
                     st.info("Poucas colunas para exibir gráficos secundários.")
             with g3, st.container(border=True):
                 if col_cargo:
                     st.markdown(f"**{col_cargo}**")
-                    mostrar_grafico(df, col_cargo, "Pizza", 8, "g_cargo")
+                    mostrar_grafico(df, col_cargo, "Pizza (auto)", 8, "g_cargo")
                 elif "Situação" in df.columns:
                     st.markdown("**Status: Ocupação**")
                     mostrar_grafico(df, "Situação", "Pizza", 2, "g_status")
                 elif "Tipo de função" in df.columns:
                     st.markdown("**Tipo de função**")
-                    mostrar_grafico(df, "Tipo de função", "Pizza", 5, "g_tipo")
+                    mostrar_grafico(df, "Tipo de função", "Pizza (auto)", 5, "g_tipo")
                 else:
                     st.info("Sem dados de status.")
 
+            st.markdown(
+                '<div style="height: 4rem;"></div>',
+                unsafe_allow_html=True,
+            )
             st.markdown("### 🧭 Explorar")
             with st.container(border=True):
                 e1, e2, e3 = st.columns([2, 2, 1])
                 col = e1.selectbox("Analisar por", cols_explorar, key="g_exp_col")
-                opcoes_tipo = ["Barras", "Pizza", "Treemap"]
-                if "Situação" in df.columns:
-                    opcoes_tipo.append("Ocupação (empilhado)")
+                opcoes_tipo = ["Barras", "Lollipop", "Pizza", "Treemap"]
+                if st.session_state.get("g_exp_tipo") not in opcoes_tipo:
+                    st.session_state["g_exp_tipo"] = opcoes_tipo[0]
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
                 topn = e3.slider("Top N", 3, 20, 10, key="g_exp_topn")
-                if tipo == "Ocupação (empilhado)":
-                    st.plotly_chart(grafico_empilhado(df, col, topn), use_container_width=True,
-                                    key="g_exp_emp")
-                else:
-                    mostrar_grafico(df, col, tipo, topn, f"g_exp_{tipo}", height=380)
+                mostrar_grafico(df, col, tipo, topn, f"g_exp_{tipo}", height=380)
 
     with tab2:
         if not datas:
