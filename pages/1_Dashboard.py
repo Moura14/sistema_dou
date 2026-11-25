@@ -10,7 +10,7 @@ import streamlit as st
 from planilhas.leitura import listar_abas, ler_planilha
 
 
-st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide") 
 
 ARQ = (
     Path(__file__).resolve().parent.parent
@@ -93,7 +93,7 @@ def preparar(df: pd.DataFrame) -> pd.DataFrame:
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1.5rem;}
+    .block-container {padding-top: 1.5rem; padding-bottom: 2rem;}
     .hero {
         background: linear-gradient(120deg, #1f4e9c 0%, #4F8BF9 60%, #7C5CFC 100%);
         color: white; padding: 22px 28px; border-radius: 16px;
@@ -110,10 +110,11 @@ st.markdown(
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(128,128,128,.04);
         border-radius: 12px;
-        padding: 15px;
+        padding: 24px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         transition: transform .15s ease, box-shadow .15s ease;
     }
+    div[data-testid="stHorizontalBlock"] {gap: 1.5rem;}
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 14px rgba(0,0,0,0.10);
@@ -183,7 +184,6 @@ def grafico_categoria(df, col, tipo, topn, height=300):
 
 
 def grafico_empilhado(df, col, topn, height=380):
-    """Barras empilhadas: ocupados x vagos por categoria."""
     top = df[col].dropna().astype(str).value_counts().head(topn).index
     base = df[df[col].astype(str).isin(top)].copy()
     base[col] = base[col].astype(str)
@@ -235,6 +235,66 @@ def limpar_filtros():
             del st.session_state[k]
 
 
+def achar_col_servidor(df: pd.DataFrame) -> str | None:
+    return next((c for c in df.columns if c.lower().startswith("servidor")), None)
+
+
+def tempo_desde(data: pd.Timestamp) -> str:
+    dias = (pd.Timestamp.now().normalize() - data).days
+    if dias < 0:
+        return "data futura"
+    anos, resto = divmod(dias, 365)
+    meses = resto // 30
+    if anos:
+        txt = f"{anos} ano{'s' if anos > 1 else ''}"
+        if meses:
+            txt += f" e {meses} {'meses' if meses > 1 else 'mês'}"
+        return txt
+    if meses:
+        return f"{meses} {'meses' if meses > 1 else 'mês'}"
+    return f"{dias} dia{'s' if dias != 1 else ''}"
+
+
+def ficha_servidor(base: pd.DataFrame, col_serv: str, nomes: list, datas: list):
+    chave = base[col_serv].astype(str).str.strip()
+    for nome in nomes:
+        regs = base[chave == nome]
+        with st.container(border=True):
+            st.markdown(f"#### 👤 {nome}")
+            if regs.empty:
+                st.caption("Nenhum registro encontrado para este servidor.")
+                continue
+            if len(regs) > 1:
+                st.caption(f"Este servidor aparece em {len(regs)} cargos/funções.")
+
+            for i, (linha, reg) in enumerate(regs.iterrows(), start=1):
+                if len(regs) > 1:
+                    st.markdown(f"**Cargo/função {i}** · linha {linha} da planilha")
+                else:
+                    st.caption(f"Linha {linha} da planilha")
+
+                datas_reg = [c for c in datas if pd.notna(reg[c])]
+                for k in range(0, len(datas_reg), 4):
+                    cs = st.columns(4)
+                    for j, c in enumerate(datas_reg[k:k + 4]):
+                        cs[j].metric(c, f"{reg[c]:%d/%m/%Y}")
+                        if "nomea" in c.lower():
+                            cs[j].caption(f"⏱️ há {tempo_desde(reg[c])}")
+
+                outros = [
+                    (c, v) for c, v in reg.items()
+                    if c != col_serv and c not in datas and c != "Situação" and pd.notna(v)
+                ]
+                if outros:
+                    meio = (len(outros) + 1) // 2
+                    ca, cb = st.columns(2)
+                    for coluna, itens in ((ca, outros[:meio]), (cb, outros[meio:])):
+                        for campo, valor in itens:
+                            coluna.markdown(f"**{campo}:** {valor}")
+                if i < len(regs):
+                    st.divider()
+
+
 
 @st.fragment(run_every=INTERVALO_ATUALIZACAO)
 def painel():
@@ -273,18 +333,42 @@ def painel():
     categoricas = [
         c for c in base.columns
         if not pd.api.types.is_datetime64_any_dtype(base[c])
-        and relevante(c)  # ignora Observações, Nome etc.
+        and relevante(c)  
         and 2 <= base[c].nunique() <= MAX_CATEGORIAS
     ]
    
     cols_graf = [c for c in categoricas if c != "Situação"] or categoricas
     principais = [c for c in cols_graf if c != "Tipo de função"] or cols_graf
 
+    datas = [c for c in base.columns if pd.api.types.is_datetime64_any_dtype(base[c])
+             and base[c].notna().any()]
+
+    col_serv = achar_col_servidor(base)
+    nomes_serv = []
+    if col_serv:
+        nomes_serv = sorted({
+            str(v).strip() for v in base[col_serv].dropna()
+            if str(v).strip() and str(v).strip().upper() != "VAGO"
+        })
+        if "f_servidor" in st.session_state:
+            st.session_state["f_servidor"] = [
+                n for n in st.session_state["f_servidor"] if n in nomes_serv
+            ]
 
     df = base
     total_bruto = len(base)
     with st.sidebar:
         st.header("🔎 Filtros")
+        if nomes_serv:
+            st.markdown("**👤 Procurar um servidor**")
+            sel_serv = st.multiselect(
+                "Nome do servidor", nomes_serv, key="f_servidor",
+                placeholder="Digite o nome…", max_selections=5,
+                help="Comece a digitar para encontrar o nome (até 5 servidores). "
+                     "A ficha com a data de nomeação e demais informações aparece "
+                     "no topo da página. Os gráficos e números não mudam.",
+            )
+            st.divider()
         st.text_input("Buscar em qualquer coluna", key="busca", placeholder="Ex.: nome, cargo…")
 
         def filtro(c):
@@ -295,13 +379,14 @@ def painel():
             if escolha:
                 df = df[df[c].astype(str).isin(escolha)]
 
-        if categoricas:
+        categoricas_filtro = [c for c in categoricas if c != "Tipo de função"]
+        if categoricas_filtro:
             st.markdown("**Filtrar por categoria**")
-            for c in categoricas[:4]:
+            for c in categoricas_filtro[:4]:
                 filtro(c)
-            if len(categoricas) > 4:
-                with st.expander(f"Mais filtros ({len(categoricas) - 4})"):
-                    for c in categoricas[4:]:
+            if len(categoricas_filtro) > 4:
+                with st.expander(f"Mais filtros ({len(categoricas_filtro) - 4})"):
+                    for c in categoricas_filtro[4:]:
                         filtro(c)
 
     busca = st.session_state.get("busca", "")
@@ -317,6 +402,10 @@ def painel():
                   use_container_width=True)
         st.caption(f"**{len(df)}** de **{total_bruto}** linhas exibidas")
         st.caption(f"🔄 Atualização automática a cada {INTERVALO_ATUALIZACAO}s")
+
+    sel_serv = st.session_state.get("f_servidor") or []
+    if sel_serv and col_serv:
+        ficha_servidor(base, col_serv, sel_serv, datas)
 
     if df.empty:
         st.warning("Nenhuma linha com os filtros atuais. Use o botão **Limpar todos os filtros** na barra lateral.")
@@ -378,13 +467,14 @@ def painel():
 
             st.markdown("### 🧭 Explorar")
             with st.container(border=True):
-                e1, e2, e3 = st.columns([2, 2, 1])
+                e1, e2, e3 = st.columns([2, 2, 1], gap="large")
                 col = e1.selectbox("Analisar por", cols_graf, key="g_exp_col")
                 opcoes_tipo = ["Barras", "Rosca", "Treemap"]
                 if "Situação" in df.columns:
                     opcoes_tipo.append("Ocupação (empilhado)")
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
                 topn = e3.slider("Top N", 3, 20, 10, key="g_exp_topn")
+                st.divider()
                 if tipo == "Ocupação (empilhado)":
                     st.plotly_chart(grafico_empilhado(df, col, topn), use_container_width=True,
                                     key="g_exp_emp")
@@ -392,8 +482,6 @@ def painel():
                     mostrar_grafico(df, col, tipo, topn, f"g_exp_{tipo}", height=380)
 
     with tab2:
-        datas = [c for c in base.columns if pd.api.types.is_datetime64_any_dtype(base[c])
-                 and base[c].notna().any()]
         if not datas:
             st.info("Esta aba não possui colunas de data reconhecidas.")
         else:
