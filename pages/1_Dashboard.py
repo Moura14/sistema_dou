@@ -358,6 +358,10 @@ def painel():
     df = base
     total_bruto = len(base)
     with st.sidebar:
+        st.markdown(
+            '<div style="height: 3rem;"></div>',
+            unsafe_allow_html=True,
+        )
         st.header("🔎 Filtros")
         if nomes_serv:
             st.markdown("**👤 Procurar um servidor**")
