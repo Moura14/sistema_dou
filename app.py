@@ -85,6 +85,42 @@ COMPOSTOS = (
 PREPOSICOES = {"de", "do", "da", "dos", "das"}
 
 
+ROTULOS_CAMPOS = {
+    "nome": "Nome",
+    "cpf": "CPF",
+    "siape": "Matrícula SIAPE",
+    "processo": "Processo",
+    "processo_substituto": "Processo do Substituto",
+    "tipo_ato": "Tipo de ato",
+    "data_portaria": "Data da portaria",
+    "cargo": "Cargo",
+    "novo_cargo": "Novo cargo",
+    "substituto": "Substituto",
+    "unidade": "Unidade",
+    "encargo": "Encargo",
+    "codigos_cargo": "Código CCE/FCE",
+    "data_efeito": "Data de efeito",
+    "data_publicacao": "Data de publicação",
+    "portaria_referida": "Portaria referida",
+    "orgao": "Órgão",
+    "ministerio": "Ministério",
+}
+
+
+CAMPO_POR_COLUNA = {
+    "servidor": "nome",
+    "matricula siape": "siape",
+    "siape": "siape",
+    "matricula": "siape",
+    "processo": "processo",
+    "substituto": "substituto",
+    "processo do substituto": "processo_substituto",
+    "codigo cce/fce": "codigos_cargo",
+    "fce/cce": "codigos_cargo",
+}
+
+
+
 CAMPOS_CARGO = ("cargo",)
 
 PASTA_COMPARTILHADA = Path(__file__).resolve().parent / "dados_compartilhados"
@@ -196,43 +232,8 @@ def hash_df(df: pd.DataFrame) -> str:
     return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()[:10]
 
 
-ROTULOS_CAMPOS = {
-    "nome": "Nome",
-    "cpf": "CPF",
-    "siape": "Matrícula SIAPE",
-    "processo": "Processo",
-    "processo_substituto": "Processo do Substituto",
-    "tipo_ato": "Tipo de ato",
-    "data_portaria": "Data da portaria",
-    "cargo": "Cargo",
-    "novo_cargo": "Novo cargo",
-    "substituto": "Substituto",
-    "unidade": "Unidade",
-    "encargo": "Encargo",
-    "codigos_cargo": "Código CCE/FCE",
-    "data_efeito": "Data de efeito",
-    "data_publicacao": "Data de publicação",
-    "portaria_referida": "Portaria referida",
-    "orgao": "Órgão",
-    "ministerio": "Ministério",
-}
-
-
 def rotulo_campo(chave: str) -> str:
     return ROTULOS_CAMPOS.get(chave) or chave.replace("_", " ").capitalize()
-
-
-CAMPO_POR_COLUNA = {
-    "servidor": "nome",
-    "matricula siape": "siape",
-    "siape": "siape",
-    "matricula": "siape",
-    "processo": "processo",
-    "substituto": "substituto",
-    "processo do substituto": "processo_substituto",
-    "codigo cce/fce": "codigos_cargo",
-    "fce/cce": "codigos_cargo",
-}
 
 
 def opcao_sugerida(registro: dict, coluna: str) -> str:
