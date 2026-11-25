@@ -234,7 +234,7 @@ def mostrar_grafico(df, col, tipo, topn, key, height=300):
 
 def limpar_filtros():
     for k in list(st.session_state.keys()):
-        if k.startswith(("f_", "g_")) or k == "busca":
+        if k.startswith(("f_", "g_")):
             del st.session_state[k]
 
 
@@ -396,8 +396,6 @@ def painel():
                      "no topo da página. Os gráficos e números não mudam.",
             )
             st.divider()
-        st.text_input("Buscar em qualquer coluna", key="busca", placeholder="Ex.: nome, cargo…")
-
         def filtro(c):
             nonlocal df
             opcoes = sorted(base[c].dropna().astype(str).unique())
@@ -413,13 +411,6 @@ def painel():
                 with st.expander(f"Mais filtros ({len(categoricas) - 4})"):
                     for c in categoricas[4:]:
                         filtro(c)
-
-    busca = st.session_state.get("busca", "")
-    if busca:
-        mask = df.astype(str).apply(
-            lambda col: col.str.contains(busca, case=False, na=False, regex=False)
-        ).any(axis=1)
-        df = df[mask]
 
     with st.sidebar:
         st.divider()
