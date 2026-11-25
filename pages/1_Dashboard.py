@@ -76,6 +76,11 @@ def preparar(df: pd.DataFrame) -> pd.DataFrame:
 
     col_serv = next((c for c in df.columns if c.lower().startswith("servidor")), None)
     if col_serv:
+        df[col_serv] = df[col_serv].map(
+            lambda v: re.sub(r"\s+", " ", re.sub(r"[\u200b\u200c\u200d\ufeff]", "", v)
+                             .replace("\xa0", " ")).strip()
+            if isinstance(v, str) else v
+        )
         df["Situação"] = (
             df[col_serv].astype(str).str.strip().str.upper().eq("VAGO")
             .map({True: "Vago", False: "Ocupado"})
@@ -93,7 +98,7 @@ def preparar(df: pd.DataFrame) -> pd.DataFrame:
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1.5rem; padding-bottom: 2rem;}
+    .block-container {padding-top: 1.5rem;}
     .hero {
         background: linear-gradient(120deg, #1f4e9c 0%, #4F8BF9 60%, #7C5CFC 100%);
         color: white; padding: 22px 28px; border-radius: 16px;
@@ -110,11 +115,10 @@ st.markdown(
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(128,128,128,.04);
         border-radius: 12px;
-        padding: 24px;
+        padding: 15px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         transition: transform .15s ease, box-shadow .15s ease;
     }
-    div[data-testid="stHorizontalBlock"] {gap: 1.5rem;}
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 14px rgba(0,0,0,0.10);
@@ -203,7 +207,6 @@ def grafico_empilhado(df, col, topn, height=380):
 
 
 def _clique(col: str, key: str):
-    """Callback do on_select: copia a seleção do gráfico para o filtro da sidebar."""
     ev = st.session_state.get(key)
     try:
         pontos = ev["selection"]["points"] if ev else []
@@ -231,12 +234,27 @@ def mostrar_grafico(df, col, tipo, topn, key, height=300):
 
 def limpar_filtros():
     for k in list(st.session_state.keys()):
-        if k.startswith(("f_", "g_")):
+        if k.startswith(("f_", "g_")) or k == "busca":
             del st.session_state[k]
 
 
 def achar_col_servidor(df: pd.DataFrame) -> str | None:
     return next((c for c in df.columns if c.lower().startswith("servidor")), None)
+
+
+def achar_col_unidade(df: pd.DataFrame) -> str | None:
+    return next((c for c in df.columns
+                 if "denomina" in c.lower() and "unidade" in c.lower()
+                 and "superior" not in c.lower()), None)
+
+
+def achar_col_cargo(df: pd.DataFrame) -> str | None:
+    for c in df.columns:
+        lc = c.lower()
+        if ("denomina" in lc and "unidade" not in lc
+                and any(k in lc for k in ("cargo", "funç", "func"))):
+            return c
+    return None
 
 
 def tempo_desde(data: pd.Timestamp) -> str:
@@ -279,7 +297,8 @@ def ficha_servidor(base: pd.DataFrame, col_serv: str, nomes: list, datas: list):
                     for j, c in enumerate(datas_reg[k:k + 4]):
                         cs[j].metric(c, f"{reg[c]:%d/%m/%Y}")
                         if "nomea" in c.lower():
-                            cs[j].caption(f"⏱️ há {tempo_desde(reg[c])}")
+                            t = tempo_desde(reg[c])
+                            cs[j].caption(f"⏱️ {t}" if t == "data futura" else f"⏱️ há {t}")
 
                 outros = [
                     (c, v) for c, v in reg.items()
@@ -333,12 +352,20 @@ def painel():
     categoricas = [
         c for c in base.columns
         if not pd.api.types.is_datetime64_any_dtype(base[c])
-        and relevante(c)  
+        and relevante(c)
         and 2 <= base[c].nunique() <= MAX_CATEGORIAS
     ]
    
     cols_graf = [c for c in categoricas if c != "Situação"] or categoricas
-    principais = [c for c in cols_graf if c != "Tipo de função"] or cols_graf
+    col_unidade = achar_col_unidade(base)
+    col_cargo = achar_col_cargo(base)
+    reservadas = {"Tipo de função", col_unidade, col_cargo}
+    principais = [c for c in cols_graf if c not in reservadas] or cols_graf
+
+    cols_explorar = list(cols_graf)
+    for c in (col_unidade, col_cargo):
+        if c and c not in cols_explorar:
+            cols_explorar.append(c)
 
     datas = [c for c in base.columns if pd.api.types.is_datetime64_any_dtype(base[c])
              and base[c].notna().any()]
@@ -358,10 +385,6 @@ def painel():
     df = base
     total_bruto = len(base)
     with st.sidebar:
-        st.markdown(
-            '<div style="height: 3rem;"></div>',
-            unsafe_allow_html=True,
-        )
         st.header("🔎 Filtros")
         if nomes_serv:
             st.markdown("**👤 Procurar um servidor**")
@@ -373,23 +396,30 @@ def painel():
                      "no topo da página. Os gráficos e números não mudam.",
             )
             st.divider()
+        st.text_input("Buscar em qualquer coluna", key="busca", placeholder="Ex.: nome, cargo…")
+
         def filtro(c):
             nonlocal df
-            # opções vêm da base completa, para a seleção nunca ficar inválida
             opcoes = sorted(base[c].dropna().astype(str).unique())
             escolha = st.multiselect(c, opcoes, key=f"f_{c}", placeholder="Todos")
             if escolha:
                 df = df[df[c].astype(str).isin(escolha)]
 
-        categoricas_filtro = [c for c in categoricas if c != "Tipo de função"]
-        if categoricas_filtro:
+        if categoricas:
             st.markdown("**Filtrar por categoria**")
-            for c in categoricas_filtro[:4]:
+            for c in categoricas[:4]:
                 filtro(c)
-            if len(categoricas_filtro) > 4:
-                with st.expander(f"Mais filtros ({len(categoricas_filtro) - 4})"):
-                    for c in categoricas_filtro[4:]:
+            if len(categoricas) > 4:
+                with st.expander(f"Mais filtros ({len(categoricas) - 4})"):
+                    for c in categoricas[4:]:
                         filtro(c)
+
+    busca = st.session_state.get("busca", "")
+    if busca:
+        mask = df.astype(str).apply(
+            lambda col: col.str.contains(busca, case=False, na=False, regex=False)
+        ).any(axis=1)
+        df = df[mask]
 
     with st.sidebar:
         st.divider()
@@ -398,6 +428,7 @@ def painel():
         st.caption(f"**{len(df)}** de **{total_bruto}** linhas exibidas")
         st.caption(f"🔄 Atualização automática a cada {INTERVALO_ATUALIZACAO}s")
 
+  
     sel_serv = st.session_state.get("f_servidor") or []
     if sel_serv and col_serv:
         ficha_servidor(base, col_serv, sel_serv, datas)
@@ -434,7 +465,9 @@ def painel():
             st.info("Não há colunas categóricas suficientes para gráficos.")
         else:
             col_principal = principais[0]
-            if "Tipo de função" in cols_graf and col_principal != "Tipo de função":
+            if col_unidade and col_unidade != col_principal:
+                col_secundaria = col_unidade
+            elif "Tipo de função" in cols_graf and col_principal != "Tipo de função":
                 col_secundaria = "Tipo de função"
             else:
                 col_secundaria = principais[1] if len(principais) > 1 else None
@@ -451,7 +484,10 @@ def painel():
                 else:
                     st.info("Poucas colunas para exibir gráficos secundários.")
             with g3, st.container(border=True):
-                if "Situação" in df.columns:
+                if col_cargo:
+                    st.markdown(f"**{col_cargo}**")
+                    mostrar_grafico(df, col_cargo, "Rosca", 8, "g_cargo")
+                elif "Situação" in df.columns:
                     st.markdown("**Status: Ocupação**")
                     mostrar_grafico(df, "Situação", "Rosca", 2, "g_status")
                 elif "Tipo de função" in df.columns:
@@ -460,23 +496,15 @@ def painel():
                 else:
                     st.info("Sem dados de status.")
 
-            st.markdown(
-                '<div style="height: 5rem;"></div>',
-                unsafe_allow_html=True,
-            )
             st.markdown("### 🧭 Explorar")
             with st.container(border=True):
-                e1, e2, e3 = st.columns([2, 2, 1], gap="large")
-                col = e1.selectbox("Analisar por", cols_graf, key="g_exp_col")
+                e1, e2, e3 = st.columns([2, 2, 1])
+                col = e1.selectbox("Analisar por", cols_explorar, key="g_exp_col")
                 opcoes_tipo = ["Barras", "Rosca", "Treemap"]
                 if "Situação" in df.columns:
                     opcoes_tipo.append("Ocupação (empilhado)")
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
                 topn = e3.slider("Top N", 3, 20, 10, key="g_exp_topn")
-                st.markdown(
-                    '<div style="height: 2rem;"></div>',
-                    unsafe_allow_html=True,
-                )
                 if tipo == "Ocupação (empilhado)":
                     st.plotly_chart(grafico_empilhado(df, col, topn), use_container_width=True,
                                     key="g_exp_emp")
@@ -528,5 +556,6 @@ def painel():
                                       xaxis_title=None, yaxis_title=None,
                                       xaxis=dict(rangeslider=dict(visible=True)))
                     st.plotly_chart(fig, use_container_width=True, key="g_timeline")
+
 
 painel()
