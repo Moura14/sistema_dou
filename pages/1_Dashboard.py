@@ -456,6 +456,10 @@ def painel():
                 else:
                     st.info("Sem dados de status.")
 
+            st.markdown(
+                '<div style="height: 5rem;"></div>',
+                unsafe_allow_html=True,
+            )
             st.markdown("### 🧭 Explorar")
             with st.container(border=True):
                 e1, e2, e3 = st.columns([2, 2, 1], gap="large")
