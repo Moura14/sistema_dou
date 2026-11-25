@@ -405,12 +405,8 @@ def painel():
 
         if categoricas:
             st.markdown("**Filtrar por categoria**")
-            for c in categoricas[:4]:
+            for c in categoricas:
                 filtro(c)
-            if len(categoricas) > 4:
-                with st.expander(f"Mais filtros ({len(categoricas) - 4})"):
-                    for c in categoricas[4:]:
-                        filtro(c)
 
     with st.sidebar:
         st.divider()
@@ -471,19 +467,19 @@ def painel():
             with g2, st.container(border=True):
                 if col_secundaria:
                     st.markdown(f"**Distribuição: {col_secundaria}**")
-                    mostrar_grafico(df, col_secundaria, "Rosca", 8, "g_secundaria")
+                    mostrar_grafico(df, col_secundaria, "Pizza", 8, "g_secundaria")
                 else:
                     st.info("Poucas colunas para exibir gráficos secundários.")
             with g3, st.container(border=True):
                 if col_cargo:
                     st.markdown(f"**{col_cargo}**")
-                    mostrar_grafico(df, col_cargo, "Rosca", 8, "g_cargo")
+                    mostrar_grafico(df, col_cargo, "Pizza", 8, "g_cargo")
                 elif "Situação" in df.columns:
                     st.markdown("**Status: Ocupação**")
-                    mostrar_grafico(df, "Situação", "Rosca", 2, "g_status")
+                    mostrar_grafico(df, "Situação", "Pizza", 2, "g_status")
                 elif "Tipo de função" in df.columns:
                     st.markdown("**Tipo de função**")
-                    mostrar_grafico(df, "Tipo de função", "Rosca", 5, "g_tipo")
+                    mostrar_grafico(df, "Tipo de função", "Pizza", 5, "g_tipo")
                 else:
                     st.info("Sem dados de status.")
 
@@ -491,7 +487,7 @@ def painel():
             with st.container(border=True):
                 e1, e2, e3 = st.columns([2, 2, 1])
                 col = e1.selectbox("Analisar por", cols_explorar, key="g_exp_col")
-                opcoes_tipo = ["Barras", "Rosca", "Treemap"]
+                opcoes_tipo = ["Barras", "Pizza", "Treemap"]
                 if "Situação" in df.columns:
                     opcoes_tipo.append("Ocupação (empilhado)")
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
