@@ -636,7 +636,7 @@ def painel():
     ocup = df[df["Situação"] == "Ocupado"] if tem_situacao else df
     vagos = len(df) - len(ocup)
 
-    # ── KPIs ──
+
     kpis = [("Cargos e funções", len(df), None),
             ("Ocupados", len(ocup), f"{len(ocup) / len(df):.0%} do total"),
             ("Vagos", vagos, f"{vagos / len(df):.0%} do total")]

@@ -8,46 +8,65 @@ NAO_NOME = {
     "SECRETÁRIA", "PROCURADOR", "PROCURADORIA", "PORTARIA", "DIÁRIO", "OFICIAL",
     "UNIÃO", "POLÍCIA", "FEDERAL", "BRASIL", "LEI", "SEI", "FAZENDA", "NACIONAL",
 }
+
 RE_VERBO = re.compile(
     r"(?i)\b(dispens\w+|design\w+|nomea\w*|nomear|exoner\w+|revert\w+|"
     r"autoriz\w+|afast\w+|reconduz\w+)\b"
 )
+
 TIPO = {"dispens": "dispensa", "design": "designação", "nome": "nomeação",
         "exoner": "exoneração", "revert": "reversão", "autoriz": "autorização",
         "afast": "afastamento", "reconduz": "recondução"}
+
 _INICIO = (
     r"(?:PORTARIAS?\b|DESPACHO\b|RETIFICA[ÇC][ÃA]O\b|"
     r"Nº\s*\d{1,5}\s*(?:[-–]|(?=Designar|Dispensar|Nomear|Exonerar|Autorizar|"
     r"Declarar|Reverter|Art|Fica|Ficam|Conceder|Tornar|D\s*ES\b|N\s*O\s*M)))"
 )
+
 RE_MARCA = re.compile(r"(?m)^\s*(?=" + _INICIO + ")")
+
 RE_INICIO = re.compile(r"\s*" + _INICIO)
+
 P_SIAPE = re.compile(r"(?i)siape(?:cad)?\s*n?[º°o]?\s*(\d{6,9})")
+
 P_CPF = re.compile(r"CPF\s*([\d\.\*\-]{10,16})")
+
 P_COD = re.compile(r"(?<![A-ZÁ-Ú])((?:FCE|CCE|FG|DAS|FCPE)[\s\-]?\d+(?:\.\d+)?)")
+
 P_CARGO = re.compile(
     r"(?:Fun[çc][ãa]o|Cargo)\s+Comissionad[ao]\s+Executiv[ao]\s+de\s+"
     r"(.+?),?\s*(?:c[óo]digo\s*)?(?:FCE|CCE)\s*\d"
 )
 P_CARGO2 = re.compile(r"(?i)fun[çc][ãa]o\s+de\s+(.+?),\s*c[óo]digo\s*(?:FCE|CCE)")
+
 VERBOS_CAPS = {"DESIGNAR", "NOMEAR", "DISPENSAR", "EXONERAR", "AUTORIZAR", "REVERTER", "RECONDUZIR"}
 RE_LETRAS = re.compile(r"\b(?:[A-ZÁ-Ú]{1,2}\s){3,}[A-ZÁ-Ú]{1,2}\b")
+
 RE_PONTILHADO = re.compile(r"(?m)^.*\.{4,}.*$")
+
 P_CARGO_GEN = re.compile(
     r"(?i)(?<!en)(?:cargo|fun[çc][ãa]o)\s*de\s*(.+?)\s*,?\s*c[óo]digo\s*(?:FCE|CCE)"
+
 )
 P_CARGO_SIMPLES = re.compile(r"(?i)(?<!en)(?:cargo|fun[çc][ãa]o)\s*de\s*([^,.;]+?)\s*(?:,|\.|;|$)")
+
 P_CARGO3 = re.compile(
     r"(?i)encargo\s+de\s+substitut\w+\s+(?:eventu\w+\s+)?"
     r"(?!(?:d[aoe]s?\s+)?(?:Cargo|Fun[çc][ãa]o)\s+Comissionad)"
     r"(?:d[aoe]s?\s+)?(.+?),\s*c[óo]digo\s*(?:FCE|CCE)"
 )
+
 P_EFET_A = re.compile(r"^\s*,\s*([^,]+?)\s*,\s*(?:matr[íi]cula|siape)", re.I)
+
 P_EFET_B = re.compile(
     r"(?i)siape(?:cad)?\s*n?[º°o]?\s*\d{6,9}\s*,\s*(?:no\s+cargo\s+de\s+)?(ambos\s+|ambas\s+)?([^,]+?)\s*,"
 )
+
 RUIM_EFET = re.compile(r"(?i)^(?:da|do|das|dos|para|ficando|a partir|lotad|no|na|exercer|e)\b|\d|fun[çc][ãa]o|c[óo]digo")
+
 P_PROC = re.compile(r"(?i)processo\s+(?:SEI\s+)?(?:n[º°o]\s*)?(\d[\d\.\/\-]+\d)")
+
 P_REF = re.compile(
     r"(?i)(?:revog\w+|retific\w+|altera\w*)\s+a\s+portaria\s+([^,]*?n[º°o]\s*[\d\.]+"
     r"(?:,\s*de\s+\d{1,2}\s+de\s+\w+\s+de\s+\d{4})?)"
@@ -56,11 +75,14 @@ P_REF2 = re.compile(
     r"(?i)\b(?:na|à)\s+portaria\s+([^,]*?n[º°o]\s*[\d\.]+(?:,\s*de\s+\d{1,2}\s+de\s+\w+\s+de\s+\d{4})?)"
 )
 P_FG = re.compile(r"(?i)(fun[çc][ãa]o\s+gratificada)")
+
 P_EFET_C = re.compile(r"^\s*,\s*([^,]+?)\s*,\s*(?:para|no\s+per[íi]odo|em)\b", re.I)
+
 P_EFET_ANTES = re.compile(
     r"\b((?:Auditor|Analista|Procurador|T[ée]cnico|Agente|Assistente|M[ée]dic|Engenheir|Professor|Servidor)"
     r"[^,.;]{0,80}?)\s*$"
 )
+
 P_EFEITO = re.compile(r"(?i)a partir de\s+(\d{1,2}\s+de\s+\w+\s+de\s+\d{4})")
 
 

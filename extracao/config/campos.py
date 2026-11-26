@@ -1,0 +1,1 @@
+_CAMPOS_UTEIS = ("tipo_ato", "nome", "cpf", "siape", "cargo", "codigos_cargo", "data_efeito")
