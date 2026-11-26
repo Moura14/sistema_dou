@@ -56,7 +56,6 @@ def relevante(c: str) -> bool:
 
 
 def limpar_texto(v):
-    """Remove caracteres invisíveis, tabs, quebras de linha e espaços duplicados."""
     if not isinstance(v, str):
         return v
     v = ZERO_WIDTH.sub("", v).replace("\xa0", " ")
@@ -181,11 +180,11 @@ st.markdown(
     """
     <style>
     .block-container {padding-top: 1.5rem;}
-    div[data-testid="stSidebarContent"] {padding-top: 6rem;}
+    div[data-testid="stSidebarContent"] {padding-top: 1.2rem;}
     .hero {
         background: transparent;
         color: inherit; padding: 0;
-        margin-bottom: 18px;
+        margin: 0 0 18px 0;
         box-shadow: none;
     }
     .hero h1 {margin: 0; font-size: 1.9rem; color: inherit;}
@@ -209,6 +208,7 @@ st.markdown(
     div[data-testid="stMetric"] {background: transparent; border: none; padding: 0;}
     div[data-testid="stMetricValue"] {font-size: 1.8rem;}
     button[data-baseweb="tab"] {font-weight: 600;}
+    div[data-baseweb="tab-panel"] {padding-top: 1em;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -310,7 +310,6 @@ def grafico_lollipop(cont, col, height=300):
 
 
 def grafico_empilhado(df, eixo, cor, height=420):
-    """Barras horizontais empilhadas: contagem de `cor` dentro de cada `eixo`."""
     t = (df.dropna(subset=[eixo, cor]).groupby([eixo, cor]).size()
          .reset_index(name="Quantidade"))
     t[eixo] = t[eixo].astype(str)
@@ -450,7 +449,6 @@ def ficha_servidor(base: pd.DataFrame, col_serv: str, nomes: list, datas: list):
 
 
 def checagens(base: pd.DataFrame) -> list[tuple[str, str, pd.DataFrame]]:
-    """Devolve [(título, explicação, linhas)] só com os problemas que existem."""
     col_serv = achar_col_servidor(base)
     col_nom = achar_col_nomeacao(base)
     col_siape = achar_col_siape(base)
@@ -531,6 +529,8 @@ def painel():
         return
 
     aba = st.sidebar.selectbox("Aba", abas, key="aba") if len(abas) > 1 else abas[0]
+    if len(abas) > 1:
+        st.sidebar.markdown('<div style="height: 1.5rem;"></div>', unsafe_allow_html=True)
 
     try:
         base = preparar(carregar(mtime, aba).copy())
@@ -593,7 +593,7 @@ def painel():
     total_bruto = len(base)
     with st.sidebar:
         st.header("🔎 Filtros")
-        st.markdown('<div style="height: 1.25rem;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 1.0rem;"></div>', unsafe_allow_html=True)
         if nomes_serv:
             st.markdown("**👤 Procurar um servidor**")
             st.multiselect(
