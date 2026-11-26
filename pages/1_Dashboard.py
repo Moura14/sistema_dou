@@ -658,8 +658,8 @@ def painel():
         ficha_servidor(base, col_serv, sel_serv, datas)
 
     st.write("")
-    tab1, tab_est, tab_perm = st.tabs([
-        "📈 Visão geral", "🏛️ Estrutura e vacância", "⏱️ Permanência",
+    tab1, tab_perm = st.tabs([
+        "📈 Visão geral", "⏱️ Permanência",
     ])
 
     with tab1:
@@ -709,36 +709,6 @@ def painel():
                 tipo = e2.radio("Tipo de gráfico", opcoes_tipo, horizontal=True, key="g_exp_tipo")
                 topn = e3.slider("Top N", 3, 20, 10, key="g_exp_topn")
                 mostrar_grafico(df, col, tipo, topn, f"g_exp_{tipo}", height=380)
-
-    with tab_est:
-        if not (col_macro and col_macro in df.columns):
-            st.info("Esta aba não tem uma coluna de macro unidade para comparar.")
-        else:
-            c1, c2 = st.columns(2)
-            if tem_situacao:
-                with c1, st.container(border=True):
-                    st.markdown(f"**Ocupação por {col_macro}**")
-                    st.plotly_chart(grafico_empilhado(df, col_macro, "Situação"),
-                                    use_container_width=True, key="g_est_sit")
-            if "Tipo de função" in df.columns:
-                with c2, st.container(border=True):
-                    st.markdown(f"**CCE × FCE por {col_macro}**")
-                    st.plotly_chart(grafico_empilhado(df, col_macro, "Tipo de função"),
-                                    use_container_width=True, key="g_est_tipo")
-
-            n1, n2 = st.columns([1, 2])
-            if "Nível" in df.columns:
-                with n1, st.container(border=True):
-                    st.markdown("**Cargos por nível**")
-                    niv = df["Nível"].dropna().value_counts().sort_index() \
-                        .rename_axis("Nível").reset_index(name="Quantidade")
-                    fig = px.bar(niv, x="Nível", y="Quantidade", text="Quantidade",
-                                 color_discrete_sequence=[COR])
-                    fig.update_traces(textposition="outside", cliponaxis=False)
-                    fig.update_layout(height=340, margin=dict(l=0, r=0, t=10, b=0),
-                                      xaxis_title=None, yaxis_title=None,
-                                      yaxis=dict(showgrid=False))
-                    st.plotly_chart(fig, use_container_width=True, key="g_est_nivel")
 
     with tab_perm:
         if not col_nom or not tem_situacao:
