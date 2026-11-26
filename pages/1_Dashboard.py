@@ -101,12 +101,12 @@ st.markdown(
     <style>
     .block-container {padding-top: 1.5rem;}
     .hero {
-        background: linear-gradient(120deg, #1f4e9c 0%, #4F8BF9 60%, #7C5CFC 100%);
-        color: white; padding: 22px 28px; border-radius: 16px;
+        background: transparent;
+        color: inherit; padding: 0;
         margin-bottom: 18px;
-        box-shadow: 0 6px 18px rgba(79,139,249,.25);
+        box-shadow: none;
     }
-    .hero h1 {margin: 0; font-size: 1.9rem; color: white;}
+    .hero h1 {margin: 0; font-size: 1.9rem; color: inherit;}
     .hero p {margin: 6px 0 0 0; opacity: .92;}
     .chip {
         display: inline-block; background: rgba(255,255,255,.18);
