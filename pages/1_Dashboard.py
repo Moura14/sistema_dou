@@ -628,10 +628,6 @@ def painel():
         st.caption(f"**{len(df)}** de **{total_bruto}** linhas exibidas")
         st.caption(f"🔄 Atualização automática a cada {INTERVALO_ATUALIZACAO}s")
 
-    sel_serv = st.session_state.get("f_servidor") or []
-    if sel_serv and col_serv:
-        ficha_servidor(base, col_serv, sel_serv, datas)
-
     if df.empty:
         st.warning("Nenhuma linha com os filtros atuais. Use o botão **Limpar todos os filtros** na barra lateral.")
         return
@@ -656,6 +652,10 @@ def painel():
                 st.metric(rotulo, valor, delta=delta, delta_color="off")
             else:
                 st.metric(rotulo, valor)
+
+    sel_serv = st.session_state.get("f_servidor") or []
+    if sel_serv and col_serv:
+        ficha_servidor(base, col_serv, sel_serv, datas)
 
     st.write("")
     tab1, tab_est, tab_perm = st.tabs([
