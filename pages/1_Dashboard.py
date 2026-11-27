@@ -410,6 +410,45 @@ def faixa_tempo(dias: pd.Series) -> pd.Series:
     )
 
 
+TOP_TABELAS = 15
+
+
+def tabela_nomeacoes(o, recentes, cols, max_anos):
+    col_serv, col_cargo, col_cod, col_unid, col_nom = cols
+    t = o.sort_values(col_nom, ascending=not recentes).head(TOP_TABELAS).copy()
+    t.insert(0, "#", range(1, len(t) + 1))
+
+    cfg = {"#": st.column_config.NumberColumn("#", width="small", format="%d")}
+    if col_serv:
+        cfg[col_serv] = st.column_config.TextColumn("Servidor", width="medium")
+    if col_cargo:
+        cfg[col_cargo] = st.column_config.TextColumn("Cargo/função", width="medium")
+    if col_cod:
+        cfg[col_cod] = st.column_config.TextColumn("Código", width="small")
+    if col_unid:
+        cfg[col_unid] = st.column_config.TextColumn("Unidade", width="large")
+    cfg[col_nom] = st.column_config.DateColumn(
+        "Nomeação", format="DD/MM/YYYY", width="small")
+
+    if recentes:
+        t["Tempo no cargo"] = t["_dias"].map(
+            lambda d: "hoje" if d == 0 else formatar_dias(int(d)))
+        cfg["Tempo no cargo"] = st.column_config.TextColumn(
+            "Tempo no cargo", width="small")
+    else:
+        t["Tempo no cargo"] = (t["_dias"] / 365.25).round(1)
+        cfg["Tempo no cargo"] = st.column_config.ProgressColumn(
+            "Tempo no cargo", format="%.1f anos",
+            min_value=0, max_value=max(float(max_anos), 1.0), width="medium")
+
+    mostrar = ["#"] + [c for c in (col_serv, col_cargo, col_cod, col_unid) if c] \
+        + [col_nom, "Tempo no cargo"]
+    st.dataframe(
+        t[mostrar], hide_index=True, width="stretch", column_config=cfg,
+        height=35 * (len(t) + 1) + 3,
+    )
+
+
 def ficha_servidor(base: pd.DataFrame, col_serv: str, nomes: list, datas: list):
     chave = base[col_serv].astype(str).str.strip()
     for nome in nomes:
@@ -621,7 +660,7 @@ def painel():
 
         if categoricas:
             st.markdown("**Filtrar por categoria**")
-            for c in categoricas:
+            for c in categoricas:   
                 filtro(c)
 
     with st.sidebar:
@@ -662,7 +701,7 @@ def painel():
 
     st.write("")
     tab1, tab_perm = st.tabs([
-        "📈 Visão geral", "⏱️ Permanência",
+        "Visão geral", "Permanência",
     ])
 
     with tab1:
@@ -765,16 +804,13 @@ def painel():
                     else:
                         st.info("Sem coluna de macro unidade.")
 
-                cols_t = [c for c in (col_serv, col_cargo, col_cod, col_unidade, col_nom) if c]
-                cfg = {col_nom: st.column_config.DateColumn(col_nom, format="DD/MM/YYYY")}
-                r1, r2 = st.columns(2)
-                with r1:
-                    st.markdown("**🆕 Nomeações mais recentes**")
-                    st.dataframe(o.sort_values(col_nom, ascending=False).head(15)[cols_t],
-                                 use_container_width=True, column_config=cfg)
-                with r2:
-                    st.markdown("**🏅 Há mais tempo no cargo**")
-                    st.dataframe(o.sort_values(col_nom).head(15)[cols_t],
-                                 use_container_width=True, column_config=cfg)
+                cols_t = (col_serv, col_cargo, col_cod, col_unidade, col_nom)
+                max_anos = (o["_dias"] / 365.25).max()
+                st.caption(f"Top {min(TOP_TABELAS, len(o))} nomeações")
+                aba_rec, aba_ant = st.tabs(["Mais recentes", "Mais antigas"])
+                with aba_rec:
+                    tabela_nomeacoes(o, True, cols_t, max_anos)
+                with aba_ant:
+                    tabela_nomeacoes(o, False, cols_t, max_anos)
 
 painel()
