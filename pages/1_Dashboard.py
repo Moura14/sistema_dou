@@ -547,7 +547,7 @@ def painel():
 
     atualizado = pd.Timestamp(mtime, unit="s", tz="UTC").tz_convert("America/Sao_Paulo")
     st.markdown(
-        f"""<div class="hero"><h1>📊 Painel da planilha</h1>
+        f"""<div class="hero"><h1>Painel da planilha</h1>
         <p><span class="chip">Aba <b>{aba}</b></span>
         <span class="chip">{len(base)} linhas</span>
         <span class="chip">Atualizada em {atualizado:%d/%m/%Y às %H:%M:%S}</span></p></div>""",
@@ -595,10 +595,10 @@ def painel():
     df = base
     total_bruto = len(base)
     with st.sidebar:
-        st.header("🔎 Filtros")
+        st.header("Filtros")
         st.markdown('<div style="height: 1.0rem;"></div>', unsafe_allow_html=True)
         if nomes_serv:
-            st.markdown("**👤 Procurar um servidor**")
+            st.markdown("Procurar um servidor")
             st.multiselect(
                 "Nome do servidor", nomes_serv, key="f_servidor",
                 placeholder="Digite o nome do servidor", max_selections=5,
@@ -702,7 +702,7 @@ def painel():
                     st.info("Sem dados de status.")
 
             st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True)
-            st.markdown("### 🧭 Explorar")
+            st.markdown("### Explorar")
             with st.container(border=True):
                 e1, e2, e3 = st.columns([2, 2, 1])
                 col = e1.selectbox("Analisar por", cols_explorar, key="g_exp_col")
