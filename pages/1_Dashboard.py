@@ -189,6 +189,9 @@ st.markdown(
     }
     .hero h1 {margin: 0; font-size: 1.9rem; color: inherit;}
     .hero p {margin: 6px 0 0 0; opacity: .92;}
+    body:has(.st-key-f_servidor [aria-expanded="true"]) [aria-label*="Select all" i] {
+        display: none !important;
+    }
     .chip {
         display: inline-block; background: rgba(128,128,128,.18);
         padding: 2px 12px; border-radius: 999px; margin-right: 8px;
@@ -598,7 +601,7 @@ def painel():
             st.markdown("**👤 Procurar um servidor**")
             st.multiselect(
                 "Nome do servidor", nomes_serv, key="f_servidor",
-                placeholder="Digite o nome…", max_selections=5,
+                placeholder="Digite o nome do servidor", max_selections=5,
                 help="Comece a digitar para encontrar o nome (até 5 servidores). "
                      "A ficha com a data de nomeação e demais informações aparece "
                      "no topo da página. Os gráficos e números não mudam.",
