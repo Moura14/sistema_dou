@@ -454,7 +454,7 @@ def ficha_servidor(base: pd.DataFrame, col_serv: str, nomes: list, datas: list):
     for nome in nomes:
         regs = base[chave == nome]
         with st.container(border=True):
-            st.markdown(f"#### 👤 {nome}")
+            st.markdown(f"####  {nome}")
             if regs.empty:
                 st.caption("Nenhum registro encontrado para este servidor.")
                 continue
@@ -763,10 +763,6 @@ def painel():
             if o.empty:
                 st.info("Não há nomeações com data válida com os filtros atuais.")
             else:
-                st.caption(
-                    f"Base: {len(o)} de {len(ocup)} ocupados com data de nomeação válida"
-                    + (f" · {futuras} com data futura ignorados." if futuras else ".")
-                )
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Tempo mediano no cargo", formatar_dias(int(o["_dias"].median())))
                 m2.metric("Tempo médio no cargo", formatar_dias(int(o["_dias"].mean())))
