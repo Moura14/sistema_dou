@@ -193,7 +193,7 @@ st.markdown(
         display: none !important;
     }
     .chip {
-        display: inline-block; background: rgba(128,128,128,.18);
+        display: inline-block; background: rgba(128,128,128,.18);e 
         padding: 2px 12px; border-radius: 999px; margin-right: 8px;
         font-size: .85rem;
     }
@@ -665,7 +665,7 @@ def painel():
 
     with st.sidebar:
         st.divider()
-        st.button("🧹 Limpar todos os filtros", on_click=limpar_filtros,
+        st.button("Limpar todos os filtros", on_click=limpar_filtros,
                   use_container_width=True)
         st.caption(f"**{len(df)}** de **{total_bruto}** linhas exibidas")
         st.caption(f"🔄 Atualização automática a cada {INTERVALO_ATUALIZACAO}s")
