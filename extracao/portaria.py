@@ -151,7 +151,7 @@ def extrair_cargo(bloco):
 def extrair_codigo(bloco):
     codigos = [f"{s.upper()}{n}" for s, n in ra._RE_CODIGO.findall(bloco)]
     if not codigos:
-        letra = ra._RE_LETRA.search(r'\bLetra\s+["“”]?([A-Z])["“”]?', bloco)
+        letra = ra._RE_LETRA.search(bloco)
         if letra:
             codigos = [f"Letra {letra.group(1)}"]
     return ", ".join(dict.fromkeys(codigos))
