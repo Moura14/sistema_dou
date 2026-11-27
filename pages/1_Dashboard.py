@@ -547,7 +547,7 @@ def painel():
 
     atualizado = pd.Timestamp(mtime, unit="s", tz="UTC").tz_convert("America/Sao_Paulo")
     st.markdown(
-        f"""<div class="hero"><h1>Painel da planilha</h1>
+        f"""<div class="hero"><h1>Dashboard da Planilha</h1>
         <p><span class="chip">Aba <b>{aba}</b></span>
         <span class="chip">{len(base)} linhas</span>
         <span class="chip">Atualizada em {atualizado:%d/%m/%Y às %H:%M:%S}</span></p></div>""",
