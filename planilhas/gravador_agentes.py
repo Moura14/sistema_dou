@@ -30,6 +30,33 @@ CT_IMAGENS = {
     "gif": "image/gif", "emf": "image/x-emf", "wmf": "image/x-wmf",
 }
 
+CAMPOS_ORIGEM = {
+    "titularidade": "Titularidade (escolhida na tela)",
+    "nome": "Nome",
+    "motivo": "Tipo do ato (Nomeação, Exoneração…)",
+    "inicio": "Data de início (só nomeação/designação)",
+    "fim": "Data de fim (só exoneração/dispensa)",
+    "data_efeito": "Data de efeito (qualquer ato)",
+    "ato": "Ato (ex.: PORTARIA Nº 49, DE 9 DE ABRIL DE 2026)",
+    "ato_designacao": "Ato — só se nomeação/designação",
+    "ato_afastamento": "Ato — só se exoneração/dispensa",
+    "numero_portaria": "Número da portaria",
+    "data_portaria": "Data da portaria",
+    "data_publicacao": "Data de publicação",
+    "cargo": "Cargo/função (texto extraído)",
+    "codigos_cargo": "Códigos do cargo (FCE/CCE)",
+    "ministerio": "Ministério",
+    "orgao": "Órgão",
+    "arquivo": "Nome do PDF",
+    "texto_original_ato": "Texto original do ato",
+}
+
+COLUNAS = {
+    "titularidade": 2, "nome": 3, "cpf": 4, "inicio": 5, "fim": 6,
+    "motivo": 7, "ato_designacao": 8, "ato_afastamento": 9,
+}
+MAPEAMENTO_PADRAO = COLUNAS
+
 
 
 def _norm(texto):
@@ -61,27 +88,6 @@ def parse_data(texto):
         return None
 
 
-
-CAMPOS_ORIGEM = {
-    "titularidade": "Titularidade (escolhida na tela)",
-    "nome": "Nome",
-    "motivo": "Tipo do ato (Nomeação, Exoneração…)",
-    "inicio": "Data de início (só nomeação/designação)",
-    "fim": "Data de fim (só exoneração/dispensa)",
-    "data_efeito": "Data de efeito (qualquer ato)",
-    "ato": "Ato (ex.: PORTARIA Nº 49, DE 9 DE ABRIL DE 2026)",
-    "ato_designacao": "Ato — só se nomeação/designação",
-    "ato_afastamento": "Ato — só se exoneração/dispensa",
-    "numero_portaria": "Número da portaria",
-    "data_portaria": "Data da portaria",
-    "data_publicacao": "Data de publicação",
-    "cargo": "Cargo/função (texto extraído)",
-    "codigos_cargo": "Códigos do cargo (FCE/CCE)",
-    "ministerio": "Ministério",
-    "orgao": "Órgão",
-    "arquivo": "Nome do PDF",
-    "texto_original_ato": "Texto original do ato",
-}
 
 
 def registro_para_linha(registro, titularidade="Titular"):
@@ -118,13 +124,6 @@ def registro_para_linha(registro, titularidade="Titular"):
         "arquivo": registro.get("arquivo"),
         "texto_original_ato": registro.get("texto_original_ato"),
     }
-
-
-COLUNAS = {
-    "titularidade": 2, "nome": 3, "cpf": 4, "inicio": 5, "fim": 6,
-    "motivo": 7, "ato_designacao": 8, "ato_afastamento": 9,
-}
-MAPEAMENTO_PADRAO = COLUNAS
 
 
 
@@ -336,7 +335,6 @@ def _caminho_rels(parte):
 
 
 def _reinjetar_desenhos(original, novo):
-    """Copia formas/imagens (drawings) do arquivo original para o salvo pelo openpyxl."""
     zo = zipfile.ZipFile(BytesIO(original))
     zn = zipfile.ZipFile(BytesIO(novo))
     nomes_o = set(zo.namelist())

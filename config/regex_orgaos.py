@@ -1,0 +1,9 @@
+_UNID = (r"(?:GABINETE|SECRETARIA|SUBSECRETARIA|DEPARTAMENTO|DIRETORIA|COORDENAÇÃO|CONSELHO|"
+         r"COMANDO|INSTITUTO|AGÊNCIA|FUNDAÇÃO|UNIVERSIDADE|PROCURADORIA|CORREGEDORIA|ESCRITÓRIO)")
+
+_P_MIN = (r"(?:((?:MINISTÉRIO|PRESIDÊNCIA DA REPÚBLICA|VICE-PRESIDÊNCIA DA REPÚBLICA|CASA CIVIL|"
+          r"CONTROLADORIA-GERAL DA UNIÃO|ADVOCACIA-GERAL DA UNIÃO|BANCO CENTRAL DO BRASIL)[ \t]*[A-ZÀ-Ý \-/]{0,70}?)[ \t]*$"
+          r"|((?:Ministério)[ \t][^\n,.]{3,70}|Presidência da República)[ \t]*$"
+          r"(?=\n[ \t]*(?:PORTARIA|" + _UNID + r")))")
+          
+_P_UNI = r"(" + _UNID + r"\b[A-ZÀ-Ý \-/]{0,60})[ \t]*$"
